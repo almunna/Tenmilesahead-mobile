@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Ten Miles Ahead",
+    "slug": "ten-miles-ahead",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2a3544"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tenmilesahead.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Ten Miles Ahead to access your photos for trip memories",
+        "NSCameraUsageDescription": "Allow Ten Miles Ahead to take photos for your trips",
+        "NSLocationWhenInUseUsageDescription": "Allow Ten Miles Ahead to show your location on maps"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2a3544"
+      },
+      "package": "com.tenmilesahead.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.DETECT_SCREEN_CAPTURE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Ten Miles Ahead to access your photos for trip memories",
+          "cameraPermission": "Allow Ten Miles Ahead to take photos for your trips"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.tenmilesahead.app",
+          "enableGooglePay": true
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f8d07344-7d5c-4681-be52-68a3ea29935d"
+      }
+    }
+  }
+}

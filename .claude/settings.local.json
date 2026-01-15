@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(node:*)",
+      "Bash(where:*)",
+      "Bash(dir \"C:\\Program Files\\Android\\Android Studio\\jbr\")",
+      "Bash(.gradlew.bat assembleDebug:*)",
+      "Bash(dir \"C:\\Users\\%USERNAME%\\AppData\\Local\\Android\\Sdk\")",
+      "Bash(dir \"C:\\Android\\Sdk\")",
+      "Bash(dir \"C:\\Program Files\\Android\\Sdk\")",
+      "Bash(powershell -Command:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}
