@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,13 @@ import {
   ScrollView,
   Image,
   Alert,
+  Linking,
+  Modal,
+  Dimensions,
+  PanResponder,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import {
   collection,
   query,
@@ -21,6 +26,7 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  setDoc,
   getDocs,
 } from "firebase/firestore";
 import {
@@ -73,6 +79,51 @@ export default function PlaceModal({
   // Additional fields
   const [extraFields, setExtraFields] = useState({});
   const [placePhotos, setPlacePhotos] = useState({});
+  const [placeDocuments, setPlaceDocuments] = useState({});
+  const [uploadingDocuments, setUploadingDocuments] = useState(false);
+  // Pending documents for the form (before saving)
+  const [pendingDocuments, setPendingDocuments] = useState([]);
+  // Photo viewer state
+  const [viewingPhotosFor, setViewingPhotosFor] = useState(null);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+
+  // Refs for swipe gesture to access current values
+  const photosRef = useRef(placePhotos);
+  const viewingRef = useRef(viewingPhotosFor);
+
+  // Keep refs updated
+  useEffect(() => {
+    photosRef.current = placePhotos;
+  }, [placePhotos]);
+
+  useEffect(() => {
+    viewingRef.current = viewingPhotosFor;
+  }, [viewingPhotosFor]);
+
+  // Swipe gesture handler for photo slider
+  const swipeThreshold = 50;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          return Math.abs(gestureState.dx) > 10;
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dx > swipeThreshold) {
+            // Swiped right - go to previous photo
+            setCurrentPhotoIndex((prev) => Math.max(0, prev - 1));
+          } else if (gestureState.dx < -swipeThreshold) {
+            // Swiped left - go to next photo
+            setCurrentPhotoIndex((prev) => {
+              const photos = photosRef.current[viewingRef.current] || [];
+              return Math.min(photos.length - 1, prev + 1);
+            });
+          }
+        },
+      }),
+    []
+  );
 
   const sortedCountries = sortAZWithOtherLast(COUNTRIES, "United States");
   const availableStates = sortAZWithOtherLast(getStates(form.country));
@@ -99,24 +150,62 @@ export default function PlaceModal({
     return () => unsub();
   }, [tripId, visible, subcollection]);
 
-  // Fetch photos for each place
+  // Fetch photos for each place from trips/{tripId}/media collection
   useEffect(() => {
     if (!tripId || !visible || !subcollection || items.length === 0) return;
 
     const fetchPhotos = async () => {
       const photoMap = {};
-      for (const item of items) {
-        const photoSnap = await getDocs(
-          collection(db, "trips", tripId, subcollection, item.id, "photos")
-        );
-        const photos = [];
-        photoSnap.forEach((doc) => photos.push({ id: doc.id, ...doc.data() }));
-        photoMap[item.id] = photos;
-      }
+      // Initialize empty arrays for all items
+      items.forEach((item) => {
+        photoMap[item.id] = [];
+      });
+
+      // Fetch all media documents for this trip that are images linked to this subcollection
+      const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
+
+      mediaSnap.forEach((d) => {
+        const data = d.data();
+        // Filter for images linked to items in this subcollection
+        if (data.type === "image" && data.linkedSubcollection === subcollection) {
+          const linkedId = data.linkedId;
+          if (photoMap[linkedId]) {
+            photoMap[linkedId].push({ id: d.id, ...data });
+          }
+        }
+      });
+
       setPlacePhotos(photoMap);
     };
 
     fetchPhotos();
+  }, [items, tripId, visible, subcollection]);
+
+  // Fetch documents for each place from trips/{tripId}/media collection
+  useEffect(() => {
+    if (!tripId || !visible || !subcollection || items.length === 0) return;
+
+    const fetchDocuments = async () => {
+      const docMap = {};
+      // Fetch all media documents for this trip that are linked to this subcollection
+      const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
+
+      mediaSnap.forEach((d) => {
+        const data = d.data();
+        // Filter for documents linked to items in this subcollection
+        if (data.type === "document" && data.linkedSubcollection === subcollection) {
+          const linkedId = data.linkedId;
+          if (!docMap[linkedId]) {
+            docMap[linkedId] = [];
+          }
+          docMap[linkedId].push({ id: d.id, ...data });
+        }
+      });
+
+      setPlaceDocuments(docMap);
+    };
+
+    fetchDocuments();
   }, [items, tripId, visible, subcollection]);
 
   function resetForm() {
@@ -136,6 +225,7 @@ export default function PlaceModal({
       locationRating: 0,
     });
     setExtraFields({});
+    setPendingDocuments([]);
     setEditingItem(null);
   }
 
@@ -167,11 +257,14 @@ export default function PlaceModal({
     if (!form.name) return;
 
     try {
+      setUploading(true);
       const data = {
         ...form,
         ...extraFields,
         ownerId: user.uid,
       };
+
+      let placeId;
 
       if (editingItem) {
         // Update existing
@@ -182,13 +275,53 @@ export default function PlaceModal({
             updatedAt: Date.now(),
           }
         );
+        placeId = editingItem.id;
       } else {
         // Create new
-        await addDoc(collection(db, "trips", tripId, subcollection), {
+        const newDoc = await addDoc(collection(db, "trips", tripId, subcollection), {
           ...data,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
+        placeId = newDoc.id;
+      }
+
+      // Upload pending documents if any - store in trips/{tripId}/media collection
+      if (pendingDocuments.length > 0 && placeId) {
+        for (const asset of pendingDocuments) {
+          const { uri, name, mimeType, size } = asset;
+
+          const response = await fetch(uri);
+          const blob = await response.blob();
+
+          // Store in trips/{tripId}/media collection like the web version
+          const mediaRef = doc(collection(db, "trips", tripId, "media"));
+          const mediaId = mediaRef.id;
+
+          const safeName = (name || `document_${Date.now()}`).replace(
+            /[^\w.\-]+/g,
+            "_"
+          );
+          const path = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
+          const sref = storageRef(storage, path);
+
+          await uploadBytes(sref, blob);
+          const url = await getDownloadURL(sref);
+
+          await setDoc(mediaRef, {
+            tripId,
+            type: "document",
+            storagePath: path,
+            downloadURL: url,
+            createdAt: Date.now(),
+            caption: `${title.slice(0, -1)} • ${form.name}`,
+            linkedSubcollection: subcollection,
+            linkedId: placeId,
+            fileName: name || safeName,
+            fileSize: size || blob.size,
+            mimeType: mimeType || "application/octet-stream",
+          });
+        }
       }
 
       resetForm();
@@ -196,6 +329,8 @@ export default function PlaceModal({
     } catch (error) {
       console.error("Error saving place:", error);
       Alert.alert("Error", "Failed to save place");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -215,6 +350,23 @@ export default function PlaceModal({
         await deleteDoc(
           doc(db, "trips", tripId, subcollection, id, "photos", photoDoc.id)
         );
+      }
+
+      // Delete documents from trips/{tripId}/media collection
+      const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
+      for (const mediaDoc of mediaSnap.docs) {
+        const mediaData = mediaDoc.data();
+        if (
+          mediaData.type === "document" &&
+          mediaData.linkedSubcollection === subcollection &&
+          mediaData.linkedId === id
+        ) {
+          if (mediaData.storagePath) {
+            const sref = storageRef(storage, mediaData.storagePath);
+            await deleteObject(sref);
+          }
+          await deleteDoc(doc(db, "trips", tripId, "media", mediaDoc.id));
+        }
       }
 
       // Delete place
@@ -237,7 +389,7 @@ export default function PlaceModal({
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
@@ -250,6 +402,10 @@ export default function PlaceModal({
   async function uploadPhotos(placeId, assets) {
     setUploading(true);
     try {
+      // Get place name for caption
+      const place = items.find((item) => item.id === placeId);
+      const placeName = place?.name || "";
+
       for (const asset of assets) {
         const { uri, fileName } = asset;
 
@@ -257,28 +413,43 @@ export default function PlaceModal({
         const response = await fetch(uri);
         const blob = await response.blob();
 
-        const photoRef = doc(
-          collection(db, "trips", tripId, subcollection, placeId, "photos")
-        );
-        const photoId = photoRef.id;
+        // Store in trips/{tripId}/media collection like the web version
+        const mediaRef = doc(collection(db, "trips", tripId, "media"));
+        const mediaId = mediaRef.id;
 
         const safeName = (fileName || `photo_${Date.now()}.jpg`).replace(
           /[^\w.\-]+/g,
           "_"
         );
-        const path = `place_photos/${user.uid}/${tripId}/${subcollection}/${placeId}/${photoId}/${safeName}`;
+        const path = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
         const sref = storageRef(storage, path);
 
         await uploadBytes(sref, blob);
         const url = await getDownloadURL(sref);
 
-        await updateDoc(photoRef, {
+        await setDoc(mediaRef, {
+          tripId,
+          type: "image",
           storagePath: path,
           downloadURL: url,
           createdAt: Date.now(),
+          caption: `${title.slice(0, -1)} • ${placeName}`,
+          linkedSubcollection: subcollection,
+          linkedId: placeId,
           fileName: safeName,
         });
       }
+
+      // Refresh photos list from media collection
+      const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
+      const photos = [];
+      mediaSnap.forEach((d) => {
+        const data = d.data();
+        if (data.type === "image" && data.linkedSubcollection === subcollection && data.linkedId === placeId) {
+          photos.push({ id: d.id, ...data });
+        }
+      });
+      setPlacePhotos((prev) => ({ ...prev, [placeId]: photos }));
     } catch (error) {
       console.error("Error uploading photos:", error);
       Alert.alert("Upload failed", error.message);
@@ -293,13 +464,175 @@ export default function PlaceModal({
         const sref = storageRef(storage, storagePath);
         await deleteObject(sref);
       }
-      await deleteDoc(
-        doc(db, "trips", tripId, subcollection, placeId, "photos", photoId)
-      );
+      // Delete from trips/{tripId}/media collection
+      await deleteDoc(doc(db, "trips", tripId, "media", photoId));
+
+      // Update local state
+      setPlacePhotos((prev) => ({
+        ...prev,
+        [placeId]: (prev[placeId] || []).filter((p) => p.id !== photoId),
+      }));
     } catch (error) {
       console.error("Error deleting photo:", error);
       Alert.alert("Error", "Failed to delete photo");
     }
+  }
+
+  // Document picker and upload functions
+  async function pickDocuments(placeId) {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "text/plain",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        uploadDocuments(placeId, result.assets);
+      }
+    } catch (error) {
+      console.error("Error picking documents:", error);
+      Alert.alert("Error", "Failed to pick documents");
+    }
+  }
+
+  async function uploadDocuments(placeId, assets) {
+    setUploadingDocuments(true);
+    try {
+      // Get place name for caption
+      const place = items.find((item) => item.id === placeId);
+      const placeName = place?.name || "";
+
+      for (const asset of assets) {
+        const { uri, name, mimeType, size } = asset;
+
+        // Fetch the file as a blob
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        // Store in trips/{tripId}/media collection like the web version
+        const mediaRef = doc(collection(db, "trips", tripId, "media"));
+        const mediaId = mediaRef.id;
+
+        const safeName = (name || `document_${Date.now()}`).replace(
+          /[^\w.\-]+/g,
+          "_"
+        );
+        const path = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
+        const sref = storageRef(storage, path);
+
+        await uploadBytes(sref, blob);
+        const url = await getDownloadURL(sref);
+
+        await setDoc(mediaRef, {
+          tripId,
+          type: "document",
+          storagePath: path,
+          downloadURL: url,
+          createdAt: Date.now(),
+          caption: `${title.slice(0, -1)} • ${placeName}`,
+          linkedSubcollection: subcollection,
+          linkedId: placeId,
+          fileName: name || safeName,
+          fileSize: size || blob.size,
+          mimeType: mimeType || "application/octet-stream",
+        });
+      }
+
+      // Refresh documents list from media collection
+      const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
+      const docs = [];
+      mediaSnap.forEach((d) => {
+        const data = d.data();
+        if (data.type === "document" && data.linkedSubcollection === subcollection && data.linkedId === placeId) {
+          docs.push({ id: d.id, ...data });
+        }
+      });
+      setPlaceDocuments((prev) => ({ ...prev, [placeId]: docs }));
+    } catch (error) {
+      console.error("Error uploading documents:", error);
+      Alert.alert("Upload failed", error.message);
+    } finally {
+      setUploadingDocuments(false);
+    }
+  }
+
+  async function deleteDocument(placeId, docId, storagePath) {
+    try {
+      if (storagePath) {
+        const sref = storageRef(storage, storagePath);
+        await deleteObject(sref);
+      }
+      // Delete from trips/{tripId}/media collection
+      await deleteDoc(doc(db, "trips", tripId, "media", docId));
+
+      // Update local state
+      setPlaceDocuments((prev) => ({
+        ...prev,
+        [placeId]: (prev[placeId] || []).filter((d) => d.id !== docId),
+      }));
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      Alert.alert("Error", "Failed to delete document");
+    }
+  }
+
+  function openDocument(url) {
+    Linking.openURL(url).catch((err) => {
+      console.error("Error opening document:", err);
+      Alert.alert("Error", "Unable to open document");
+    });
+  }
+
+  // Pick documents for the form (before saving)
+  async function pickFormDocuments() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "text/plain",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        setPendingDocuments((prev) => [...prev, ...result.assets]);
+      }
+    } catch (error) {
+      console.error("Error picking documents:", error);
+      Alert.alert("Error", "Failed to pick documents");
+    }
+  }
+
+  function removePendingDocument(index) {
+    setPendingDocuments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function getFileIcon(mimeType) {
+    if (mimeType?.includes("pdf")) return "PDF";
+    if (mimeType?.includes("word") || mimeType?.includes("document")) return "DOC";
+    if (mimeType?.includes("excel") || mimeType?.includes("spreadsheet")) return "XLS";
+    if (mimeType?.includes("text")) return "TXT";
+    return "FILE";
   }
 
   const formatDisplayDate = (dateStr) => {
@@ -325,7 +658,7 @@ export default function PlaceModal({
   };
 
   const renderItem = ({ item }) => {
-    const photos = placePhotos[item.id] || [];
+    const documents = placeDocuments[item.id] || [];
 
     return (
       <View style={styles.itemCard}>
@@ -391,24 +724,46 @@ export default function PlaceModal({
           </View>
         )}
 
-        {/* Photos */}
-        {photos.length > 0 && (
-          <View style={styles.photosContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {photos.map((photo) => (
-                <View key={photo.id} style={styles.photoWrapper}>
-                  <Image
-                    source={{ uri: photo.downloadURL }}
-                    style={styles.photo}
-                    resizeMode="cover"
-                  />
+
+        {/* Documents / Attached Files */}
+        {documents.length > 0 && (
+          <View style={styles.documentsContainer}>
+            <Text style={styles.documentsTitle}>
+              Attached Files ({documents.length})
+            </Text>
+            <ScrollView
+              style={styles.documentsScrollView}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}
+            >
+              {documents.map((docItem) => (
+                <View key={docItem.id} style={styles.documentItem}>
+                  <View style={styles.documentIcon}>
+                    <Text style={styles.documentIconText}>
+                      {getFileIcon(docItem.mimeType)}
+                    </Text>
+                  </View>
+                  <View style={styles.documentDetails}>
+                    <Text style={styles.documentName} numberOfLines={1}>
+                      {docItem.fileName}
+                    </Text>
+                    <Text style={styles.documentSize}>
+                      {formatFileSize(docItem.fileSize)}
+                    </Text>
+                  </View>
                   <TouchableOpacity
-                    style={styles.photoDeleteButton}
+                    style={styles.documentDownloadButton}
+                    onPress={() => openDocument(docItem.downloadURL)}
+                  >
+                    <Text style={styles.documentDownloadIcon}>⬇</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.documentDeleteButton}
                     onPress={() =>
-                      deletePhoto(item.id, photo.id, photo.storagePath)
+                      deleteDocument(item.id, docItem.id, docItem.storagePath)
                     }
                   >
-                    <Text style={styles.photoDeleteText}>×</Text>
+                    <Text style={styles.documentDeleteText}>×</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -423,8 +778,17 @@ export default function PlaceModal({
             disabled={uploading}
           >
             <Text style={styles.uploadButtonText}>
-              {uploading ? "Uploading..." : "📷 Add Photos"}
+              {uploading ? "Uploading..." : "Add Photos"}
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.attachButton}
+            onPress={() => {
+              setCurrentPhotoIndex(0);
+              setViewingPhotosFor(item.id);
+            }}
+          >
+            <Text style={styles.attachButtonText}>View Photos</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.deleteButton}
@@ -544,6 +908,43 @@ export default function PlaceModal({
                 numberOfLines={3}
               />
 
+              {/* Attach Files Section */}
+              <Text style={styles.label}>Attach Files (PDF, Documents, etc.)</Text>
+              <TouchableOpacity
+                style={styles.attachFilesButton}
+                onPress={pickFormDocuments}
+              >
+                <Text style={styles.attachFilesButtonText}>+ Choose Files</Text>
+              </TouchableOpacity>
+
+              {pendingDocuments.length > 0 && (
+                <View style={styles.pendingDocumentsContainer}>
+                  {pendingDocuments.map((docItem, index) => (
+                    <View key={index} style={styles.pendingDocumentItem}>
+                      <View style={styles.pendingDocumentIcon}>
+                        <Text style={styles.pendingDocumentIconText}>
+                          {getFileIcon(docItem.mimeType)}
+                        </Text>
+                      </View>
+                      <View style={styles.pendingDocumentDetails}>
+                        <Text style={styles.pendingDocumentName} numberOfLines={1}>
+                          {docItem.name}
+                        </Text>
+                        <Text style={styles.pendingDocumentSize}>
+                          {formatFileSize(docItem.size)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.pendingDocumentRemove}
+                        onPress={() => removePendingDocument(index)}
+                      >
+                        <Text style={styles.pendingDocumentRemoveText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <Text style={styles.label}>Review</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -631,13 +1032,111 @@ export default function PlaceModal({
         title={`Delete ${title.slice(0, -1)}`}
         message={`Are you sure you want to delete this ${title
           .slice(0, -1)
-          .toLowerCase()}? All photos will also be deleted.`}
+          .toLowerCase()}? All photos and attached files will also be deleted.`}
         confirmText="Delete"
         cancelText="Cancel"
         confirmVariant="danger"
         onConfirm={() => handleDelete(deleteId)}
         onCancel={() => setDeleteId(null)}
       />
+
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={!!viewingPhotosFor}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingPhotosFor(null)}
+      >
+        <View style={styles.photoModalOverlay}>
+          {/* Close button at top right */}
+          <TouchableOpacity
+            style={styles.photoModalCloseButton}
+            onPress={() => setViewingPhotosFor(null)}
+          >
+            <Text style={styles.photoModalCloseText}>×</Text>
+          </TouchableOpacity>
+
+          {(placePhotos[viewingPhotosFor] || []).length === 0 ? (
+            <View style={styles.noPhotosContainer}>
+              <Text style={styles.noPhotosTextWhite}>
+                No photos yet. Tap "Add Photos" to upload.
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* Photo counter */}
+              <View style={styles.photoCounter}>
+                <Text style={styles.photoCounterText}>
+                  {currentPhotoIndex + 1} / {(placePhotos[viewingPhotosFor] || []).length}
+                </Text>
+              </View>
+
+              {/* Main photo display */}
+              <View style={styles.photoSliderContainer}>
+                {/* Left Arrow */}
+                <TouchableOpacity
+                  style={[
+                    styles.arrowButton,
+                    styles.arrowButtonLeft,
+                    currentPhotoIndex === 0 && styles.arrowButtonDisabled,
+                  ]}
+                  onPress={() => setCurrentPhotoIndex((prev) => Math.max(0, prev - 1))}
+                  disabled={currentPhotoIndex === 0}
+                >
+                  <Text style={styles.arrowText}>‹</Text>
+                </TouchableOpacity>
+
+                {/* Photo */}
+                <View style={styles.photoFrame} {...panResponder.panHandlers}>
+                  <Image
+                    source={{
+                      uri: (placePhotos[viewingPhotosFor] || [])[currentPhotoIndex]?.downloadURL,
+                    }}
+                    style={styles.photoModalImage}
+                    resizeMode="contain"
+                  />
+                </View>
+
+                {/* Right Arrow */}
+                <TouchableOpacity
+                  style={[
+                    styles.arrowButton,
+                    styles.arrowButtonRight,
+                    currentPhotoIndex >= (placePhotos[viewingPhotosFor] || []).length - 1 &&
+                      styles.arrowButtonDisabled,
+                  ]}
+                  onPress={() =>
+                    setCurrentPhotoIndex((prev) =>
+                      Math.min((placePhotos[viewingPhotosFor] || []).length - 1, prev + 1)
+                    )
+                  }
+                  disabled={currentPhotoIndex >= (placePhotos[viewingPhotosFor] || []).length - 1}
+                >
+                  <Text style={styles.arrowText}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Delete button */}
+              <TouchableOpacity
+                style={styles.deletePhotoButton}
+                onPress={() => {
+                  const photos = placePhotos[viewingPhotosFor] || [];
+                  const photo = photos[currentPhotoIndex];
+                  if (photo) {
+                    deletePhoto(viewingPhotosFor, photo.id, photo.storagePath);
+                    // Adjust index if we deleted the last photo
+                    if (currentPhotoIndex >= photos.length - 1 && currentPhotoIndex > 0) {
+                      setCurrentPhotoIndex(currentPhotoIndex - 1);
+                    }
+                  }
+                }}
+              >
+                <Text style={styles.deletePhotoButtonText}>Delete Photo</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Modal>
     </ModalShell>
   );
 }
@@ -757,6 +1256,20 @@ const styles = StyleSheet.create({
   },
   photosContainer: {
     marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  photosTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.muted,
+    marginBottom: SPACING.sm,
+  },
+  noPhotosText: {
+    fontSize: 13,
+    color: COLORS.muted,
+    fontStyle: "italic",
   },
   photoWrapper: {
     position: "relative",
@@ -803,6 +1316,159 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 12,
     color: COLORS.error,
+  },
+  attachButton: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  attachButtonText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    textAlign: "center",
+  },
+  documentsContainer: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  documentsScrollView: {
+    maxHeight: 180,
+  },
+  documentsTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.muted,
+    marginBottom: SPACING.sm,
+  },
+  documentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  documentInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  documentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: SPACING.sm,
+  },
+  documentIconText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  documentDetails: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 14,
+    color: COLORS.foreground,
+    fontWeight: "500",
+  },
+  documentSize: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  documentDownloadButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: SPACING.sm,
+  },
+  documentDownloadIcon: {
+    color: COLORS.white,
+    fontSize: 14,
+  },
+  documentDeleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.error,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: SPACING.xs,
+  },
+  documentDeleteText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  // Form attach files styles
+  attachFilesButton: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+    alignItems: "center",
+  },
+  attachFilesButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  pendingDocumentsContainer: {
+    marginTop: SPACING.sm,
+  },
+  pendingDocumentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  pendingDocumentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: SPACING.sm,
+  },
+  pendingDocumentIconText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  pendingDocumentDetails: {
+    flex: 1,
+  },
+  pendingDocumentName: {
+    fontSize: 13,
+    color: COLORS.foreground,
+    fontWeight: "500",
+  },
+  pendingDocumentSize: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  pendingDocumentRemove: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  pendingDocumentRemoveText: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: "600",
   },
   formContainer: {
     padding: SPACING.md,
@@ -870,5 +1536,107 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  // Photo Modal Styles
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  photoModalCloseButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.error,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  photoModalCloseText: {
+    color: COLORS.white,
+    fontSize: 28,
+    fontWeight: "bold",
+    lineHeight: 30,
+  },
+  photoCounter: {
+    position: "absolute",
+    top: 55,
+    left: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  photoCounterText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  photoSliderContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    paddingHorizontal: 10,
+  },
+  arrowButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  arrowButtonLeft: {
+    marginRight: 10,
+  },
+  arrowButtonRight: {
+    marginLeft: 10,
+  },
+  arrowButtonDisabled: {
+    opacity: 0.3,
+  },
+  arrowText: {
+    color: COLORS.white,
+    fontSize: 36,
+    fontWeight: "bold",
+    lineHeight: 40,
+  },
+  photoFrame: {
+    width: Dimensions.get("window").width - 140,
+    height: Dimensions.get("window").height * 0.6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  photoModalImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 8,
+  },
+  noPhotosContainer: {
+    padding: SPACING.xl,
+    alignItems: "center",
+  },
+  noPhotosTextWhite: {
+    color: COLORS.white,
+    fontSize: 16,
+    textAlign: "center",
+  },
+  deletePhotoButton: {
+    position: "absolute",
+    bottom: 50,
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  deletePhotoButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

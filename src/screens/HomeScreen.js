@@ -37,15 +37,109 @@ import PlaceModal from "../components/modals/PlaceModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
 import AddTripModal from "../components/modals/AddTripModal";
 import { COLORS, SPACING, SCREENS } from "../lib/constants";
-import { dateRangeOf } from "../lib/utils";
+import { dateRangeOf, formatDateMMDDYYYY } from "../lib/utils";
 import { calculateDistance } from "../lib/geocoding";
+
+// Countdown Timer Component
+function CountdownTimer({ targetDate }) {
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const now = new Date().getTime();
+      const target = new Date(targetDate).getTime();
+      const difference = target - now;
+
+      if (difference <= 0) {
+        return { days: 0, hours: 0, mins: 0, secs: 0 };
+      }
+
+      return {
+        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        mins: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
+        secs: Math.floor((difference % (1000 * 60)) / 1000),
+      };
+    };
+
+    setTimeLeft(calculateTimeLeft());
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [targetDate]);
+
+  const pad = (num) => String(num).padStart(2, "0");
+
+  return (
+    <View style={countdownStyles.container}>
+      <View style={countdownStyles.timeBlock}>
+        <Text style={countdownStyles.timeValue}>{timeLeft.days}</Text>
+        <Text style={countdownStyles.timeLabel}>DAYS</Text>
+      </View>
+      <Text style={countdownStyles.separator}>:</Text>
+      <View style={countdownStyles.timeBlock}>
+        <Text style={countdownStyles.timeValue}>{pad(timeLeft.hours)}</Text>
+        <Text style={countdownStyles.timeLabel}>HRS</Text>
+      </View>
+      <Text style={countdownStyles.separator}>:</Text>
+      <View style={countdownStyles.timeBlock}>
+        <Text style={countdownStyles.timeValue}>{pad(timeLeft.mins)}</Text>
+        <Text style={countdownStyles.timeLabel}>MIN</Text>
+      </View>
+      <Text style={countdownStyles.separator}>:</Text>
+      <View style={countdownStyles.timeBlock}>
+        <Text style={countdownStyles.timeValue}>{pad(timeLeft.secs)}</Text>
+        <Text style={countdownStyles.timeLabel}>SEC</Text>
+      </View>
+    </View>
+  );
+}
+
+const countdownStyles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    top: SPACING.sm,
+    right: SPACING.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 8,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  timeBlock: {
+    alignItems: "center",
+    minWidth: 32,
+  },
+  timeValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.white,
+  },
+  timeLabel: {
+    fontSize: 8,
+    color: COLORS.white,
+    opacity: 0.8,
+    marginTop: 1,
+  },
+  separator: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: COLORS.white,
+    marginHorizontal: 1,
+    marginBottom: 10,
+  },
+});
 
 export default function HomeScreen() {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
   const [trips, setTrips] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [upcomingTrip, setUpcomingTrip] = useState(null);
+  const [upcomingTrips, setUpcomingTrips] = useState([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFromPicker, setShowFromPicker] = useState(false);
@@ -128,10 +222,12 @@ export default function HomeScreen() {
         snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
         setTrips(arr);
 
-        // Find upcoming trip
+        // Find all upcoming trips (sorted by startDate ascending - nearest first)
         const today = new Date().toISOString().split("T")[0];
-        const upcoming = arr.find((t) => t.startDate >= today);
-        setUpcomingTrip(upcoming || null);
+        const upcoming = arr
+          .filter((t) => t.startDate >= today)
+          .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+        setUpcomingTrips(upcoming);
       },
       () => setTrips([])
     );
@@ -503,23 +599,32 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      {/* Upcoming Trip */}
-      {upcomingTrip && (
-        <TouchableOpacity
-          style={styles.upcomingCard}
-          onPress={() =>
-            navigation.navigate(SCREENS.TRIP_DETAIL, {
-              tripId: upcomingTrip.id,
-            })
-          }
-        >
-          <Text style={styles.upcomingLabel}>Upcoming Trip</Text>
-          <Text style={styles.upcomingTitle}>{upcomingTrip.name}</Text>
-          <Text style={styles.upcomingDates}>{dateRangeOf(upcomingTrip)}</Text>
-          <Text style={styles.upcomingLocation}>
-            {upcomingTrip.city}, {upcomingTrip.country}
+      {/* Upcoming Trips */}
+      {upcomingTrips.length > 0 && (
+        <View style={styles.upcomingSection}>
+          <Text style={styles.upcomingSectionTitle}>
+            Upcoming {upcomingTrips.length === 1 ? "Trip" : "Trips"}
           </Text>
-        </TouchableOpacity>
+          {upcomingTrips.map((trip) => (
+            <TouchableOpacity
+              key={trip.id}
+              style={styles.upcomingCard}
+              onPress={() =>
+                navigation.navigate(SCREENS.TRIP_DETAIL, {
+                  tripId: trip.id,
+                })
+              }
+            >
+              <CountdownTimer targetDate={trip.startDate} />
+              <Text style={styles.upcomingLabel}>Upcoming Trip</Text>
+              <Text style={styles.upcomingTitle}>{trip.name}</Text>
+              <Text style={styles.upcomingDates}>{dateRangeOf(trip)}</Text>
+              <Text style={styles.upcomingLocation}>
+                {trip.city}, {trip.country}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
 
       {/* My Trips */}
@@ -550,7 +655,7 @@ export default function HomeScreen() {
             >
               <Text style={styles.dateLabel}>From</Text>
               <Text style={styles.dateText}>
-                {dateFrom || "Select date"}
+                {dateFrom ? formatDateMMDDYYYY(dateFrom) : "Select date"}
               </Text>
             </TouchableOpacity>
 
@@ -560,7 +665,7 @@ export default function HomeScreen() {
             >
               <Text style={styles.dateLabel}>To</Text>
               <Text style={styles.dateText}>
-                {dateTo || "Select date"}
+                {dateTo ? formatDateMMDDYYYY(dateTo) : "Select date"}
               </Text>
             </TouchableOpacity>
 
@@ -972,11 +1077,20 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     textAlign: "center",
   },
+  upcomingSection: {
+    marginBottom: SPACING.lg,
+  },
+  upcomingSectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: COLORS.foreground,
+    marginBottom: SPACING.md,
+  },
   upcomingCard: {
     backgroundColor: COLORS.primary,
     borderRadius: 16,
     padding: SPACING.lg,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   upcomingLabel: {
     fontSize: 12,

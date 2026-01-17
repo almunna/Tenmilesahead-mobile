@@ -166,6 +166,7 @@ function GlobalReviewsInner({ navigation }) {
               country: data.country || "",
               address: data.address || null,
               phone: data.phoneNumber || null,
+              websiteUrl: data.websiteUrl || null,
               notes: data.review || data.notes || null,
               visitDate: data.startDate || null,
               createdAt: data.createdAt || Date.now(),
@@ -275,6 +276,7 @@ function GlobalReviewsInner({ navigation }) {
       );
 
       // Update the review document (include required fields for validation)
+      const now = Date.now();
       await updateDoc(reviewRef, {
         name: updatedReview.placeName,
         city: updatedReview.city,
@@ -290,11 +292,23 @@ function GlobalReviewsInner({ navigation }) {
         websiteUrl: updatedReview.websiteUrl || null,
         coverMediaId: updatedReview.coverMediaId || null,
         createdAt: updatedReview.createdAt,
-        updatedAt: Date.now(),
+        updatedAt: now,
       });
 
+      // Update local state instead of reloading all reviews
+      setAllReviews((prevReviews) =>
+        prevReviews.map((r) =>
+          r.id === updatedReview.id
+            ? {
+                ...r,
+                ...updatedReview,
+                updatedAt: now,
+              }
+            : r
+        )
+      );
+
       setEditingReview(null);
-      loadReviews();
     } catch (error) {
       console.error("Error updating review:", error);
       Alert.alert("Error", "Failed to update review. Please try again.");
@@ -495,6 +509,18 @@ function GlobalReviewsInner({ navigation }) {
                         <View style={styles.ratingRow}>
                           <Text style={styles.ratingLabel}>Service:</Text>
                           <View style={styles.starsRow}>{renderStars(review.serviceRating)}</View>
+                        </View>
+                      )}
+                      {review.valueRating > 0 && (
+                        <View style={styles.ratingRow}>
+                          <Text style={styles.ratingLabel}>Value:</Text>
+                          <View style={styles.starsRow}>{renderStars(review.valueRating)}</View>
+                        </View>
+                      )}
+                      {review.locationRating > 0 && (
+                        <View style={styles.ratingRow}>
+                          <Text style={styles.ratingLabel}>Location:</Text>
+                          <View style={styles.starsRow}>{renderStars(review.locationRating)}</View>
                         </View>
                       )}
                     </View>
