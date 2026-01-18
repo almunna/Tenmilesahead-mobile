@@ -1,6 +1,49 @@
 // lib/constants.js
 // App-wide constants
 
+import { Dimensions, PixelRatio } from "react-native";
+
+// Screen dimensions for responsive scaling
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// Base dimensions (iPhone 11 Pro)
+const baseWidth = 375;
+const baseHeight = 812;
+
+// Check if device is a tablet (screen width > 600)
+export const isTablet = SCREEN_WIDTH > 600;
+
+// Scale factor based on screen width
+const scale = SCREEN_WIDTH / baseWidth;
+
+// Moderate scale - less aggressive scaling for tablets
+export const moderateScale = (size, factor = 0.5) => {
+  const newSize = size + (scale - 1) * size * factor;
+  // For tablets, apply additional scaling
+  if (isTablet) {
+    return Math.round(PixelRatio.roundToNearestPixel(newSize * 1.3));
+  }
+  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+};
+
+// Font scaling with tablet support
+export const scaleFontSize = (size) => {
+  const newSize = size * scale;
+  if (isTablet) {
+    // Tablets get 40% larger fonts
+    return Math.round(PixelRatio.roundToNearestPixel(newSize * 1.4));
+  }
+  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+};
+
+// Spacing scaling
+export const scaleSpacing = (size) => {
+  if (isTablet) {
+    return Math.round(size * 1.5);
+  }
+  return size;
+};
+
 // Transportation options
 export const TRANSPORT_OPTIONS = [
   "Airplane",
