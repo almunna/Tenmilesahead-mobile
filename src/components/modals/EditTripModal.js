@@ -13,7 +13,11 @@ import {
   Platform,
   ActivityIndicator,
   Image,
+  useWindowDimensions,
 } from "react-native";
+
+// Tablet breakpoint
+const TABLET_BREAKPOINT = 600;
 import * as ImagePicker from "expo-image-picker";
 import {
   doc,
@@ -37,7 +41,7 @@ import { db, storage } from "../../lib/firebase";
 import { useAuth } from "../AuthProvider";
 import Dropdown from "../Dropdown";
 import DatePicker from "../DatePicker";
-import { COLORS, SPACING, TRANSPORT_OPTIONS } from "../../lib/constants";
+import { COLORS, SPACING, TRANSPORT_OPTIONS, scaleFontSize, scaleSpacing } from "../../lib/constants";
 import { sortAZWithOtherLast } from "../../lib/utils";
 import { COUNTRIES, getStates } from "../../lib/geo";
 import { getCruiseLineNames, getShipsForCruiseLine } from "../../lib/cruiseData";
@@ -46,6 +50,8 @@ const OTHER_CRUISE_LINE = "Other";
 
 export default function EditTripModal({ tripId, visible, onClose }) {
   const { user } = useAuth();
+  const { width, height } = useWindowDimensions();
+  const isTablet = width >= TABLET_BREAKPOINT;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -496,6 +502,281 @@ export default function EditTripModal({ tripId, visible, onClose }) {
 
   if (!visible) return null;
 
+  const renderFormContent = () => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.label}>Trip Title *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g., Summer in Paris"
+          placeholderTextColor={COLORS.muted}
+          value={form.name}
+          onChangeText={(text) => setForm({ ...form, name: text })}
+        />
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.halfColumn}>
+          <DatePicker
+            label="Start Date *"
+            value={form.startDate}
+            onSelect={(date) => setForm({ ...form, startDate: date })}
+            placeholder="Select start date"
+          />
+        </View>
+        <View style={styles.halfColumn}>
+          <DatePicker
+            label="End Date *"
+            value={form.endDate}
+            onSelect={(date) => setForm({ ...form, endDate: date })}
+            placeholder="Select end date"
+            minDate={form.startDate}
+          />
+        </View>
+      </View>
+
+      <Text style={styles.sectionTitle}>Starting From</Text>
+
+      <Dropdown
+        label="Origin Country"
+        value={form.originCountry}
+        options={sortedCountries}
+        onSelect={(value) =>
+          setForm({ ...form, originCountry: value, originState: "" })
+        }
+        placeholder="Select origin country"
+        searchable
+      />
+
+      <Dropdown
+        label="Origin State / Province"
+        value={form.originState}
+        options={availableOriginStates}
+        onSelect={(value) => setForm({ ...form, originState: value })}
+        placeholder="Select or enter state/province"
+        searchable
+        allowCustom
+      />
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Origin City</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g., St. Augustine"
+          placeholderTextColor={COLORS.muted}
+          value={form.originCity}
+          onChangeText={(text) => setForm({ ...form, originCity: text })}
+        />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Address</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g., 123 Main Street, Suite 100"
+          placeholderTextColor={COLORS.muted}
+          value={form.originAddress}
+          onChangeText={(text) =>
+            setForm({ ...form, originAddress: text })
+          }
+        />
+      </View>
+
+      <Dropdown
+        label="Mode of Transportation"
+        value={form.originTransportationType}
+        options={TRANSPORT_OPTIONS}
+        onSelect={(value) =>
+          setForm({ ...form, originTransportationType: value })
+        }
+        placeholder="Select transportation"
+      />
+
+      {isCruise && (
+        <>
+          <Dropdown
+            label="Cruise Line *"
+            value={form.cruiseLine}
+            options={getCruiseLineNames()}
+            onSelect={(value) =>
+              setForm({
+                ...form,
+                cruiseLine: value,
+                cruiseShip: "",
+                customCruiseShip: "",
+              })
+            }
+            placeholder="Select cruise line"
+            searchable
+          />
+
+          {form.cruiseLine === OTHER_CRUISE_LINE && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Enter Cruise Line Name *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter cruise line name"
+                placeholderTextColor={COLORS.muted}
+                value={form.customCruiseLine}
+                onChangeText={(text) =>
+                  setForm({ ...form, customCruiseLine: text })
+                }
+              />
+            </View>
+          )}
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Ship Name *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter ship name"
+              placeholderTextColor={COLORS.muted}
+              value={form.customCruiseShip || form.cruiseShip}
+              onChangeText={(text) =>
+                setForm({ ...form, customCruiseShip: text })
+              }
+            />
+          </View>
+
+          {/* Cruise Review Section */}
+          <View style={styles.reviewSection}>
+            <Text style={styles.sectionTitle}>
+              Cruise Review (Optional)
+            </Text>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>Your Review</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Share your cruise experience..."
+                placeholderTextColor={COLORS.muted}
+                value={cruiseReview.review}
+                onChangeText={(text) =>
+                  setCruiseReview({ ...cruiseReview, review: text })
+                }
+                multiline
+                numberOfLines={4}
+              />
+            </View>
+
+            {renderStarRating(
+              cruiseReview.qualityRating,
+              (rating) =>
+                setCruiseReview({
+                  ...cruiseReview,
+                  qualityRating: rating,
+                }),
+              "Overall Quality"
+            )}
+            {renderStarRating(
+              cruiseReview.valueRating,
+              (rating) =>
+                setCruiseReview({ ...cruiseReview, valueRating: rating }),
+              "Value for Money"
+            )}
+            {renderStarRating(
+              cruiseReview.serviceRating,
+              (rating) =>
+                setCruiseReview({
+                  ...cruiseReview,
+                  serviceRating: rating,
+                }),
+              "Service"
+            )}
+            {renderStarRating(
+              cruiseReview.foodRating,
+              (rating) =>
+                setCruiseReview({ ...cruiseReview, foodRating: rating }),
+              "Food & Dining"
+            )}
+            {renderStarRating(
+              cruiseReview.entertainmentRating,
+              (rating) =>
+                setCruiseReview({
+                  ...cruiseReview,
+                  entertainmentRating: rating,
+                }),
+              "Entertainment"
+            )}
+          </View>
+        </>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Description</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Add trip description..."
+          placeholderTextColor={COLORS.muted}
+          value={form.description}
+          onChangeText={(text) => setForm({ ...form, description: text })}
+          multiline
+          numberOfLines={3}
+        />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Photos/Videos</Text>
+        <TouchableOpacity
+          style={styles.uploadButton}
+          onPress={pickImages}
+          disabled={saving}
+        >
+          <Text style={styles.uploadButtonText}>
+            📷 Add Photos/Videos
+          </Text>
+        </TouchableOpacity>
+
+        {allMedia.length > 0 && (
+          <View style={styles.mediaGrid}>
+            {allMedia.map((item, index) => renderMediaItem(item, index))}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.bottomSpacer} />
+    </>
+  );
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+        <Text style={styles.headerButtonText}>Cancel</Text>
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Edit Trip</Text>
+      <TouchableOpacity
+        onPress={handleSave}
+        style={[styles.headerButton, styles.saveHeaderButton]}
+        disabled={saving}
+      >
+        {saving ? (
+          <ActivityIndicator size="small" color={COLORS.white} />
+        ) : (
+          <Text style={styles.saveHeaderButtonText}>Save</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderContent = () => (
+    <>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.formContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {renderFormContent()}
+        </ScrollView>
+      )}
+    </>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -508,269 +789,8 @@ export default function EditTripModal({ tripId, visible, onClose }) {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardView}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.headerButton}>
-              <Text style={styles.headerButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Edit Trip</Text>
-            <TouchableOpacity
-              onPress={handleSave}
-              style={[styles.headerButton, styles.saveHeaderButton]}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color={COLORS.white} />
-              ) : (
-                <Text style={styles.saveHeaderButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : (
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.formContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.section}>
-                <Text style={styles.label}>Trip Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Summer in Paris"
-                  placeholderTextColor={COLORS.muted}
-                  value={form.name}
-                  onChangeText={(text) => setForm({ ...form, name: text })}
-                />
-              </View>
-
-              <View style={styles.row}>
-                <View style={styles.halfColumn}>
-                  <DatePicker
-                    label="Start Date *"
-                    value={form.startDate}
-                    onSelect={(date) => setForm({ ...form, startDate: date })}
-                    placeholder="Select start date"
-                  />
-                </View>
-                <View style={styles.halfColumn}>
-                  <DatePicker
-                    label="End Date *"
-                    value={form.endDate}
-                    onSelect={(date) => setForm({ ...form, endDate: date })}
-                    placeholder="Select end date"
-                    minDate={form.startDate}
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.sectionTitle}>Starting From</Text>
-
-              <Dropdown
-                label="Origin Country"
-                value={form.originCountry}
-                options={sortedCountries}
-                onSelect={(value) =>
-                  setForm({ ...form, originCountry: value, originState: "" })
-                }
-                placeholder="Select origin country"
-                searchable
-              />
-
-              <Dropdown
-                label="Origin State / Province"
-                value={form.originState}
-                options={availableOriginStates}
-                onSelect={(value) => setForm({ ...form, originState: value })}
-                placeholder="Select or enter state/province"
-                searchable
-                allowCustom
-              />
-
-              <View style={styles.section}>
-                <Text style={styles.label}>Origin City</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., St. Augustine"
-                  placeholderTextColor={COLORS.muted}
-                  value={form.originCity}
-                  onChangeText={(text) => setForm({ ...form, originCity: text })}
-                />
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.label}>Address</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 123 Main Street, Suite 100"
-                  placeholderTextColor={COLORS.muted}
-                  value={form.originAddress}
-                  onChangeText={(text) =>
-                    setForm({ ...form, originAddress: text })
-                  }
-                />
-              </View>
-
-              <Dropdown
-                label="Mode of Transportation"
-                value={form.originTransportationType}
-                options={TRANSPORT_OPTIONS}
-                onSelect={(value) =>
-                  setForm({ ...form, originTransportationType: value })
-                }
-                placeholder="Select transportation"
-              />
-
-              {isCruise && (
-                <>
-                  <Dropdown
-                    label="Cruise Line *"
-                    value={form.cruiseLine}
-                    options={getCruiseLineNames()}
-                    onSelect={(value) =>
-                      setForm({
-                        ...form,
-                        cruiseLine: value,
-                        cruiseShip: "",
-                        customCruiseShip: "",
-                      })
-                    }
-                    placeholder="Select cruise line"
-                    searchable
-                  />
-
-                  {form.cruiseLine === OTHER_CRUISE_LINE && (
-                    <View style={styles.section}>
-                      <Text style={styles.label}>Enter Cruise Line Name *</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter cruise line name"
-                        placeholderTextColor={COLORS.muted}
-                        value={form.customCruiseLine}
-                        onChangeText={(text) =>
-                          setForm({ ...form, customCruiseLine: text })
-                        }
-                      />
-                    </View>
-                  )}
-
-                  <View style={styles.section}>
-                    <Text style={styles.label}>Ship Name *</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter ship name"
-                      placeholderTextColor={COLORS.muted}
-                      value={form.customCruiseShip || form.cruiseShip}
-                      onChangeText={(text) =>
-                        setForm({ ...form, customCruiseShip: text })
-                      }
-                    />
-                  </View>
-
-                  {/* Cruise Review Section */}
-                  <View style={styles.reviewSection}>
-                    <Text style={styles.sectionTitle}>
-                      Cruise Review (Optional)
-                    </Text>
-
-                    <View style={styles.section}>
-                      <Text style={styles.label}>Your Review</Text>
-                      <TextInput
-                        style={[styles.input, styles.textArea]}
-                        placeholder="Share your cruise experience..."
-                        placeholderTextColor={COLORS.muted}
-                        value={cruiseReview.review}
-                        onChangeText={(text) =>
-                          setCruiseReview({ ...cruiseReview, review: text })
-                        }
-                        multiline
-                        numberOfLines={4}
-                      />
-                    </View>
-
-                    {renderStarRating(
-                      cruiseReview.qualityRating,
-                      (rating) =>
-                        setCruiseReview({
-                          ...cruiseReview,
-                          qualityRating: rating,
-                        }),
-                      "Overall Quality"
-                    )}
-                    {renderStarRating(
-                      cruiseReview.valueRating,
-                      (rating) =>
-                        setCruiseReview({ ...cruiseReview, valueRating: rating }),
-                      "Value for Money"
-                    )}
-                    {renderStarRating(
-                      cruiseReview.serviceRating,
-                      (rating) =>
-                        setCruiseReview({
-                          ...cruiseReview,
-                          serviceRating: rating,
-                        }),
-                      "Service"
-                    )}
-                    {renderStarRating(
-                      cruiseReview.foodRating,
-                      (rating) =>
-                        setCruiseReview({ ...cruiseReview, foodRating: rating }),
-                      "Food & Dining"
-                    )}
-                    {renderStarRating(
-                      cruiseReview.entertainmentRating,
-                      (rating) =>
-                        setCruiseReview({
-                          ...cruiseReview,
-                          entertainmentRating: rating,
-                        }),
-                      "Entertainment"
-                    )}
-                  </View>
-                </>
-              )}
-
-              <View style={styles.section}>
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Add trip description..."
-                  placeholderTextColor={COLORS.muted}
-                  value={form.description}
-                  onChangeText={(text) => setForm({ ...form, description: text })}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Photos/Videos</Text>
-                <TouchableOpacity
-                  style={styles.uploadButton}
-                  onPress={pickImages}
-                  disabled={saving}
-                >
-                  <Text style={styles.uploadButtonText}>
-                    📷 Add Photos/Videos
-                  </Text>
-                </TouchableOpacity>
-
-                {allMedia.length > 0 && (
-                  <View style={styles.mediaGrid}>
-                    {allMedia.map((item, index) => renderMediaItem(item, index))}
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.bottomSpacer} />
-            </ScrollView>
-          )}
+          {renderHeader()}
+          {renderContent()}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
@@ -778,6 +798,27 @@ export default function EditTripModal({ tripId, visible, onClose }) {
 }
 
 const styles = StyleSheet.create({
+  tabletOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: scaleSpacing(SPACING.md),
+  },
+  tabletContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    maxWidth: 600,
+    width: "90%",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -789,34 +830,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: "600",
     color: COLORS.foreground,
   },
   headerButton: {
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
+    paddingVertical: scaleSpacing(SPACING.xs),
+    paddingHorizontal: scaleSpacing(SPACING.sm),
   },
   headerButtonText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS.muted,
   },
   saveHeaderButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    minWidth: 60,
+    paddingHorizontal: scaleSpacing(SPACING.md),
+    paddingVertical: scaleSpacing(SPACING.xs),
+    minWidth: scaleFontSize(60),
     alignItems: "center",
   },
   saveHeaderButtonText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS.white,
     fontWeight: "600",
   },
@@ -826,76 +867,76 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    marginTop: SPACING.md,
-    fontSize: 16,
+    marginTop: scaleSpacing(SPACING.md),
+    fontSize: scaleFontSize(16),
     color: COLORS.muted,
   },
   scrollView: {
     flex: 1,
   },
   formContent: {
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
   },
   section: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: "600",
     color: COLORS.foreground,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginTop: scaleSpacing(SPACING.lg),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   input: {
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
   textArea: {
-    height: 100,
+    height: scaleSpacing(100),
     textAlignVertical: "top",
   },
   row: {
     flexDirection: "row",
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
+    gap: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   halfColumn: {
     flex: 1,
   },
   reviewSection: {
-    marginTop: SPACING.lg,
-    paddingTop: SPACING.lg,
+    marginTop: scaleSpacing(SPACING.lg),
+    paddingTop: scaleSpacing(SPACING.lg),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   ratingContainer: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   ratingLabel: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   starsRow: {
     flexDirection: "row",
-    gap: 4,
+    gap: scaleSpacing(4),
   },
   starButton: {
-    width: 32,
-    height: 32,
+    width: scaleFontSize(32),
+    height: scaleFontSize(32),
     justifyContent: "center",
     alignItems: "center",
   },
   star: {
-    fontSize: 24,
+    fontSize: scaleFontSize(24),
   },
   starFilled: {
     color: "#FFD700",
@@ -905,30 +946,30 @@ const styles = StyleSheet.create({
   },
   uploadButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: scaleSpacing(SPACING.md),
+    paddingHorizontal: scaleSpacing(SPACING.lg),
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   uploadButtonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   mediaGrid: {
-    gap: SPACING.md,
-    marginTop: SPACING.md,
+    gap: scaleSpacing(SPACING.md),
+    marginTop: scaleSpacing(SPACING.md),
   },
   mediaCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   mediaPreview: {
     width: "100%",
-    height: 200,
+    height: scaleSpacing(200),
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: COLORS.surfaceLight,
@@ -945,38 +986,38 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceLight,
   },
   videoText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS.muted,
   },
   mediaActions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   coverActive: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: "#16a34a",
   },
   coverInactive: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.primary,
   },
   removeText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.error,
   },
   captionContainer: {
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   captionInput: {
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    padding: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
     color: COLORS.foreground,
-    fontSize: 14,
-    minHeight: 40,
+    fontSize: scaleFontSize(14),
+    minHeight: scaleFontSize(40),
   },
   bottomSpacer: {
-    height: SPACING.xxl,
+    height: scaleSpacing(SPACING.xxl),
   },
 });

@@ -272,23 +272,6 @@ export default function TripDetailScreen() {
     .join(", ");
 
   const itinerary = [
-    ...(trip.city
-      ? [
-          {
-            kind: "Primary Destination",
-            subcollection: "trip",
-            data: {
-              id: "trip-destination",
-              name: trip.city || trip.country,
-              city: trip.city,
-              state: trip.state,
-              country: trip.country,
-              startDate: trip.startDate,
-              endDate: trip.endDate,
-            },
-          },
-        ]
-      : []),
     ...destinations.map((d) => ({
       kind: "Destination",
       subcollection: "destinations",

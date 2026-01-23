@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { COLORS, SPACING, SCREENS } from "../lib/constants";
+import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 export default function SigninScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -211,51 +211,51 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: SPACING.lg,
+    padding: scaleSpacing(SPACING.lg),
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: SPACING.lg,
+    borderRadius: scaleFontSize(16),
+    padding: scaleSpacing(SPACING.lg),
   },
   title: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: "600",
     color: COLORS.foreground,
-    marginBottom: SPACING.lg,
+    marginBottom: scaleSpacing(SPACING.lg),
   },
   inputGroup: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   input: {
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 8,
-    padding: SPACING.md,
+    borderRadius: scaleFontSize(8),
+    padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
   forgotButton: {
     alignSelf: "flex-end",
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   forgotButtonText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.primary,
   },
   errorText: {
     color: COLORS.error,
-    fontSize: 14,
-    marginBottom: SPACING.md,
+    fontSize: scaleFontSize(14),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   button: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
+    paddingVertical: scaleSpacing(SPACING.md),
+    borderRadius: scaleFontSize(8),
     alignItems: "center",
   },
   buttonDisabled: {
@@ -263,74 +263,74 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: SPACING.lg,
+    marginTop: scaleSpacing(SPACING.lg),
   },
   footerText: {
     color: COLORS.muted,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   linkText: {
     color: COLORS.primary,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.lg,
+    padding: scaleSpacing(SPACING.lg),
   },
   modalContent: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: SPACING.lg,
+    borderRadius: scaleFontSize(16),
+    padding: scaleSpacing(SPACING.lg),
     width: "100%",
-    maxWidth: 400,
+    maxWidth: scaleFontSize(400),
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     fontWeight: "600",
     color: COLORS.foreground,
   },
   closeButton: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: COLORS.muted,
-    padding: SPACING.xs,
+    padding: scaleSpacing(SPACING.xs),
   },
   modalDescription: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.lg,
-    lineHeight: 20,
+    marginBottom: scaleSpacing(SPACING.lg),
+    lineHeight: scaleFontSize(20),
   },
   modalButtons: {
     flexDirection: "row",
-    gap: SPACING.sm,
-    marginTop: SPACING.md,
+    gap: scaleSpacing(SPACING.sm),
+    marginTop: scaleSpacing(SPACING.md),
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
+    paddingVertical: scaleSpacing(SPACING.md),
+    borderRadius: scaleFontSize(8),
     alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   cancelButtonText: {
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
 });

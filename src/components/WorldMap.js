@@ -10,7 +10,7 @@ import {
 import { WebView } from "react-native-webview";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { COLORS, SPACING } from "../lib/constants";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../lib/constants";
 import { getCoordinates } from "../lib/geocoding";
 
 export default function WorldMap({ trips, user }) {
@@ -610,7 +610,11 @@ export default function WorldMap({ trips, user }) {
         <Text style={styles.pinListTitle}>
           Destinations ({pins.length} pins)
         </Text>
-        <ScrollView style={styles.pinList}>
+        <ScrollView
+          style={styles.pinList}
+          nestedScrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+        >
           {pins.map((pin) => (
             <TouchableOpacity
               key={pin.id}
@@ -638,13 +642,13 @@ export default function WorldMap({ trips, user }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   title: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "700",
     color: COLORS.foreground,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   loadingContainer: {
     height: 400,
@@ -654,9 +658,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
     color: COLORS.muted,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   emptyContainer: {
     height: 200,
@@ -664,11 +668,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
   },
   emptyText: {
     color: COLORS.muted,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     textAlign: "center",
   },
   mapContainer: {
@@ -676,7 +680,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     overflow: "hidden",
-    marginBottom: SPACING.sm,
+    marginBottom: scaleSpacing(SPACING.sm),
   },
   webview: {
     flex: 1,
@@ -695,14 +699,14 @@ const styles = StyleSheet.create({
   pinListContainer: {
     backgroundColor: "#2c3e50",
     borderRadius: 8,
-    padding: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
     maxHeight: 250,
   },
   pinListTitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   pinList: {
     maxHeight: 200,
@@ -712,8 +716,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#3d5266",
     borderRadius: 6,
-    padding: SPACING.xs,
-    marginBottom: SPACING.xs,
+    padding: scaleSpacing(SPACING.xs),
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   pinItemSelected: {
     backgroundColor: "#4a5f7a",
@@ -721,23 +725,23 @@ const styles = StyleSheet.create({
     borderColor: "#66bfcc",
   },
   pinIcon: {
-    fontSize: 16,
-    marginRight: SPACING.xs,
+    fontSize: scaleFontSize(16),
+    marginRight: scaleSpacing(SPACING.xs),
   },
   pinInfo: {
     flex: 1,
   },
   pinCity: {
-    fontSize: 13,
+    fontSize: scaleFontSize(13),
     fontWeight: "600",
     color: "#FFFFFF",
   },
   pinState: {
-    fontSize: 11,
+    fontSize: scaleFontSize(11),
     color: "rgba(255, 255, 255, 0.8)",
   },
   pinTrip: {
-    fontSize: 10,
+    fontSize: scaleFontSize(10),
     color: "rgba(255, 255, 255, 0.6)",
     marginTop: 2,
   },

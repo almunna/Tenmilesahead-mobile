@@ -28,7 +28,7 @@ import { useAuth } from "../AuthProvider";
 import ModalShell from "./ModalShell";
 import Dropdown from "../Dropdown";
 import DatePicker from "../DatePicker";
-import { COLORS, SPACING } from "../../lib/constants";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../../lib/constants";
 import { COUNTRIES, getStates } from "../../lib/geo";
 import { sortAZWithOtherLast } from "../../lib/utils";
 
@@ -691,68 +691,68 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
   },
   section: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: "600",
     color: COLORS.foreground,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginTop: scaleSpacing(SPACING.lg),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   input: {
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
   textArea: {
-    height: 100,
+    height: scaleSpacing(100),
     textAlignVertical: "top",
   },
   row: {
     flexDirection: "row",
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
+    gap: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   halfColumn: {
     flex: 1,
   },
   reviewSection: {
-    marginTop: SPACING.lg,
-    paddingTop: SPACING.lg,
+    marginTop: scaleSpacing(SPACING.lg),
+    paddingTop: scaleSpacing(SPACING.lg),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   ratingContainer: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   ratingLabel: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   starsRow: {
     flexDirection: "row",
-    gap: 4,
+    gap: scaleSpacing(4),
   },
   starButton: {
-    width: 32,
-    height: 32,
+    width: scaleFontSize(32),
+    height: scaleFontSize(32),
     justifyContent: "center",
     alignItems: "center",
   },
   star: {
-    fontSize: 24,
+    fontSize: scaleFontSize(24),
   },
   starFilled: {
     color: "#FFD700",
@@ -762,35 +762,35 @@ const styles = StyleSheet.create({
   },
   uploadButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: scaleSpacing(SPACING.md),
+    paddingHorizontal: scaleSpacing(SPACING.lg),
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: scaleSpacing(SPACING.sm),
   },
   uploadButtonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   clearText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.primary,
     textAlign: "center",
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   mediaGrid: {
-    gap: SPACING.md,
+    gap: scaleSpacing(SPACING.md),
   },
   mediaCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   mediaPreview: {
     width: "100%",
-    height: 200,
+    height: scaleSpacing(200),
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: COLORS.surfaceLight,
@@ -807,55 +807,55 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceLight,
   },
   videoText: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS.muted,
   },
   mediaActions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   coverActive: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: "#16a34a",
   },
   coverInactive: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.primary,
   },
   removeText: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.error,
   },
   captionContainer: {
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   captionInput: {
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    padding: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
     color: COLORS.foreground,
-    fontSize: 14,
-    minHeight: 40,
+    fontSize: scaleFontSize(14),
+    minHeight: scaleFontSize(40),
   },
   buttonContainer: {
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
-    gap: SPACING.md,
+    marginTop: scaleSpacing(SPACING.lg),
+    marginBottom: scaleSpacing(SPACING.xl),
+    gap: scaleSpacing(SPACING.md),
   },
   createButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
+    paddingVertical: scaleSpacing(SPACING.md),
     borderRadius: 8,
     alignItems: "center",
   },
   createButtonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   cancelButton: {
-    paddingVertical: SPACING.md,
+    paddingVertical: scaleSpacing(SPACING.md),
     borderRadius: 8,
     alignItems: "center",
     borderWidth: 1,
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   buttonDisabled: {

@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
-import { COLORS, SPACING } from "../lib/constants";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 const FAQS = [
   {
@@ -97,19 +97,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   content: {
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
   },
   title: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: "bold",
     color: COLORS.foreground,
-    marginBottom: SPACING.lg,
+    marginBottom: scaleSpacing(SPACING.lg),
+    marginTop: 20,
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    borderRadius: scaleFontSize(12),
+    padding: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.sm),
   },
   questionRow: {
     flexDirection: "row",
@@ -118,28 +119,28 @@ const styles = StyleSheet.create({
   },
   question: {
     flex: 1,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
     color: COLORS.foreground,
-    paddingRight: SPACING.sm,
+    paddingRight: scaleSpacing(SPACING.sm),
   },
   arrow: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: COLORS.muted,
   },
   answer: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginTop: SPACING.md,
-    lineHeight: 22,
+    marginTop: scaleSpacing(SPACING.md),
+    lineHeight: scaleFontSize(22),
   },
   backButton: {
     alignItems: "center",
-    paddingVertical: SPACING.lg,
-    marginTop: SPACING.md,
+    paddingVertical: scaleSpacing(SPACING.lg),
+    marginTop: scaleSpacing(SPACING.md),
   },
   backButtonText: {
     color: COLORS.primary,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
 });

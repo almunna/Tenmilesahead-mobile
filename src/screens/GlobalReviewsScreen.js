@@ -35,11 +35,25 @@ import { db, storage } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
 import Protected from "../components/Protected";
 import SubscriptionRequiredModal from "../components/SubscriptionRequiredModal";
-import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing, isTablet } from "../lib/constants";
+import {
+  COLORS,
+  SPACING,
+  SCREENS,
+  scaleFontSize,
+  scaleSpacing,
+  isTablet,
+} from "../lib/constants";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 
-const REVIEW_TYPES = ["All Types", "Destinations", "Activities", "Accommodations", "Restaurants", "Cruises"];
+const REVIEW_TYPES = [
+  "All Types",
+  "Destinations",
+  "Activities",
+  "Accommodations",
+  "Restaurants",
+  "Cruises",
+];
 
 function formatDateString(dateStr) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
@@ -63,7 +77,8 @@ function GlobalReviewsInner({ navigation }) {
 
   const subscription = profile?.subscription;
   const isSubscribed =
-    (subscription?.status === "active" || subscription?.status === "trialing") &&
+    (subscription?.status === "active" ||
+      subscription?.status === "trialing") &&
     !subscription?.cancelAtPeriodEnd;
 
   if (!isSubscribed) {
@@ -125,7 +140,10 @@ function GlobalReviewsInner({ navigation }) {
 
         for (const { name, type } of subcollections) {
           const snapshot = await getDocs(
-            query(collection(db, "trips", tripId, name), orderBy("createdAt", "desc"))
+            query(
+              collection(db, "trips", tripId, name),
+              orderBy("createdAt", "desc"),
+            ),
           );
 
           for (const reviewDoc of snapshot.docs) {
@@ -135,8 +153,8 @@ function GlobalReviewsInner({ navigation }) {
               query(
                 collection(db, "trips", tripId, "media"),
                 where("linkedSubcollection", "==", name),
-                where("linkedId", "==", reviewDoc.id)
-              )
+                where("linkedId", "==", reviewDoc.id),
+              ),
             );
 
             const mediaItems = mediaSnapshot.docs.map((mediaDoc) => ({
@@ -192,11 +210,18 @@ function GlobalReviewsInner({ navigation }) {
     }
   };
 
-  const uniqueLocations = ["All Locations", ...Array.from(new Set(allReviews.map((r) => r.city).filter(Boolean))).sort()];
+  const uniqueLocations = [
+    "All Locations",
+    ...Array.from(
+      new Set(allReviews.map((r) => r.city).filter(Boolean)),
+    ).sort(),
+  ];
 
   const filteredReviews = allReviews.filter((review) => {
-    const matchesType = selectedType === "All Types" || review.type === selectedType;
-    const matchesLocation = selectedLocation === "All Locations" || review.city === selectedLocation;
+    const matchesType =
+      selectedType === "All Types" || review.type === selectedType;
+    const matchesLocation =
+      selectedLocation === "All Locations" || review.city === selectedLocation;
     return matchesType && matchesLocation;
   });
 
@@ -232,14 +257,16 @@ function GlobalReviewsInner({ navigation }) {
                 Cruises: "cruises",
               };
               const subcollection = subcollectionMap[review.type];
-              await deleteDoc(doc(db, "trips", review.tripId, subcollection, review.id));
+              await deleteDoc(
+                doc(db, "trips", review.tripId, subcollection, review.id),
+              );
               loadReviews();
             } catch (error) {
               Alert.alert("Error", "Failed to delete review.");
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -272,7 +299,7 @@ function GlobalReviewsInner({ navigation }) {
         "trips",
         updatedReview.tripId,
         subcollection,
-        updatedReview.id
+        updatedReview.id,
       );
 
       // Update the review document (include required fields for validation)
@@ -304,8 +331,8 @@ function GlobalReviewsInner({ navigation }) {
                 ...updatedReview,
                 updatedAt: now,
               }
-            : r
-        )
+            : r,
+        ),
       );
 
       setEditingReview(null);
@@ -361,7 +388,8 @@ function GlobalReviewsInner({ navigation }) {
         </View>
 
         <Text style={styles.resultCount}>
-          Showing {Math.min(visibleCount, filteredReviews.length)} of {filteredReviews.length} reviews
+          Showing {Math.min(visibleCount, filteredReviews.length)} of{" "}
+          {filteredReviews.length} reviews
         </Text>
       </View>
 
@@ -405,9 +433,14 @@ function GlobalReviewsInner({ navigation }) {
       )}
 
       {/* Reviews List */}
-      <ScrollView style={styles.reviewsList} contentContainerStyle={styles.reviewsContent}>
+      <ScrollView
+        style={styles.reviewsList}
+        contentContainerStyle={styles.reviewsContent}
+      >
         {filteredReviews.length === 0 ? (
-          <Text style={styles.emptyText}>No reviews found matching your filters.</Text>
+          <Text style={styles.emptyText}>
+            No reviews found matching your filters.
+          </Text>
         ) : (
           <>
             {visibleReviews.map((review) => (
@@ -443,7 +476,9 @@ function GlobalReviewsInner({ navigation }) {
                     </View>
 
                     {review.ownerUsername && (
-                      <Text style={styles.ownerName}>@{review.ownerUsername}</Text>
+                      <Text style={styles.ownerName}>
+                        @{review.ownerUsername}
+                      </Text>
                     )}
 
                     {/* Location with Map Link */}
@@ -451,14 +486,22 @@ function GlobalReviewsInner({ navigation }) {
                       style={styles.infoRow}
                       onPress={() => {
                         const destination = encodeURIComponent(
-                          review.address || `${review.placeName}, ${review.city}, ${review.state || review.country}`
+                          review.address ||
+                            `${review.placeName}, ${review.city}, ${review.state || review.country}`,
                         );
-                        Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
+                        Linking.openURL(
+                          `https://www.google.com/maps/dir/?api=1&destination=${destination}`,
+                        );
                       }}
                     >
-                      <Ionicons name="location-outline" size={16} color="rgba(255,255,255,0.7)" />
+                      <Ionicons
+                        name="location-outline"
+                        size={16}
+                        color="rgba(255,255,255,0.7)"
+                      />
                       <Text style={styles.infoText} numberOfLines={1}>
-                        {review.address || `${review.city}, ${review.state || review.country}`}
+                        {review.address ||
+                          `${review.city}, ${review.state || review.country}`}
                       </Text>
                     </TouchableOpacity>
 
@@ -466,9 +509,17 @@ function GlobalReviewsInner({ navigation }) {
                     {review.phone && (
                       <TouchableOpacity
                         style={styles.infoRow}
-                        onPress={() => Linking.openURL(`tel:${review.phone.replace(/[^\d+]/g, '')}`)}
+                        onPress={() =>
+                          Linking.openURL(
+                            `tel:${review.phone.replace(/[^\d+]/g, "")}`,
+                          )
+                        }
                       >
-                        <Ionicons name="call-outline" size={16} color="rgba(255,255,255,0.7)" />
+                        <Ionicons
+                          name="call-outline"
+                          size={16}
+                          color="rgba(255,255,255,0.7)"
+                        />
                         <Text style={styles.infoText}>{review.phone}</Text>
                       </TouchableOpacity>
                     )}
@@ -484,7 +535,11 @@ function GlobalReviewsInner({ navigation }) {
                           Linking.openURL(url);
                         }}
                       >
-                        <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.7)" />
+                        <Ionicons
+                          name="globe-outline"
+                          size={16}
+                          color="rgba(255,255,255,0.7)"
+                        />
                         <Text style={styles.infoText} numberOfLines={1}>
                           {review.websiteUrl}
                         </Text>
@@ -502,25 +557,33 @@ function GlobalReviewsInner({ navigation }) {
                       {review.qualityRating > 0 && (
                         <View style={styles.ratingRow}>
                           <Text style={styles.ratingLabel}>Quality:</Text>
-                          <View style={styles.starsRow}>{renderStars(review.qualityRating)}</View>
+                          <View style={styles.starsRow}>
+                            {renderStars(review.qualityRating)}
+                          </View>
                         </View>
                       )}
                       {review.serviceRating > 0 && (
                         <View style={styles.ratingRow}>
                           <Text style={styles.ratingLabel}>Service:</Text>
-                          <View style={styles.starsRow}>{renderStars(review.serviceRating)}</View>
+                          <View style={styles.starsRow}>
+                            {renderStars(review.serviceRating)}
+                          </View>
                         </View>
                       )}
                       {review.valueRating > 0 && (
                         <View style={styles.ratingRow}>
                           <Text style={styles.ratingLabel}>Value:</Text>
-                          <View style={styles.starsRow}>{renderStars(review.valueRating)}</View>
+                          <View style={styles.starsRow}>
+                            {renderStars(review.valueRating)}
+                          </View>
                         </View>
                       )}
                       {review.locationRating > 0 && (
                         <View style={styles.ratingRow}>
                           <Text style={styles.ratingLabel}>Location:</Text>
-                          <View style={styles.starsRow}>{renderStars(review.locationRating)}</View>
+                          <View style={styles.starsRow}>
+                            {renderStars(review.locationRating)}
+                          </View>
                         </View>
                       )}
                     </View>
@@ -530,7 +593,9 @@ function GlobalReviewsInner({ navigation }) {
                       {review.visitDate && (
                         <View style={styles.dateRow}>
                           <Text style={styles.dateIcon}>📅</Text>
-                          <Text style={styles.dateText}>{formatDateString(review.visitDate)}</Text>
+                          <Text style={styles.dateText}>
+                            {formatDateString(review.visitDate)}
+                          </Text>
                         </View>
                       )}
                       <View style={styles.actionButtons}>
@@ -546,7 +611,9 @@ function GlobalReviewsInner({ navigation }) {
                               style={styles.deleteButton}
                               onPress={() => handleDeleteReview(review)}
                             >
-                              <Text style={styles.deleteButtonText}>Delete</Text>
+                              <Text style={styles.deleteButtonText}>
+                                Delete
+                              </Text>
                             </TouchableOpacity>
                           </>
                         )}
@@ -555,7 +622,9 @@ function GlobalReviewsInner({ navigation }) {
                             style={styles.addReviewButton}
                             onPress={() => handleAddReview(review)}
                           >
-                            <Text style={styles.addReviewButtonText}>Add Your Review</Text>
+                            <Text style={styles.addReviewButtonText}>
+                              Add Your Review
+                            </Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -590,7 +659,9 @@ function GlobalReviewsInner({ navigation }) {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>{selectedReview.placeName}</Text>
+                  <Text style={styles.modalTitle}>
+                    {selectedReview.placeName}
+                  </Text>
                   <Text style={styles.modalSubtitle}>
                     {selectedReview.city}, {selectedReview.country}
                   </Text>
@@ -607,7 +678,9 @@ function GlobalReviewsInner({ navigation }) {
                 {/* Overall Rating */}
                 {selectedReview.overallRating > 0 && (
                   <View style={styles.modalRating}>
-                    <View style={styles.starsRow}>{renderStars(Math.round(selectedReview.overallRating))}</View>
+                    <View style={styles.starsRow}>
+                      {renderStars(Math.round(selectedReview.overallRating))}
+                    </View>
                     <Text style={styles.ratingNumber}>
                       {selectedReview.overallRating.toFixed(1)}
                     </Text>
@@ -625,10 +698,18 @@ function GlobalReviewsInner({ navigation }) {
                 {selectedReview.phone && (
                   <TouchableOpacity
                     style={styles.contactRow}
-                    onPress={() => Linking.openURL(`tel:${selectedReview.phone}`)}
+                    onPress={() =>
+                      Linking.openURL(`tel:${selectedReview.phone}`)
+                    }
                   >
-                    <Ionicons name="call-outline" size={16} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.contactText}>{selectedReview.phone}</Text>
+                    <Ionicons
+                      name="call-outline"
+                      size={16}
+                      color="rgba(255,255,255,0.7)"
+                    />
+                    <Text style={styles.contactText}>
+                      {selectedReview.phone}
+                    </Text>
                   </TouchableOpacity>
                 )}
 
@@ -643,8 +724,14 @@ function GlobalReviewsInner({ navigation }) {
                       Linking.openURL(url);
                     }}
                   >
-                    <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.contactText}>{selectedReview.websiteUrl}</Text>
+                    <Ionicons
+                      name="globe-outline"
+                      size={16}
+                      color="rgba(255,255,255,0.7)"
+                    />
+                    <Text style={styles.contactText}>
+                      {selectedReview.websiteUrl}
+                    </Text>
                   </TouchableOpacity>
                 )}
 
@@ -652,7 +739,9 @@ function GlobalReviewsInner({ navigation }) {
                 {selectedReview.notes && (
                   <View style={styles.modalSection}>
                     <Text style={styles.modalSectionTitle}>Review Notes</Text>
-                    <Text style={styles.modalNotes}>{selectedReview.notes}</Text>
+                    <Text style={styles.modalNotes}>
+                      {selectedReview.notes}
+                    </Text>
                   </View>
                 )}
 
@@ -715,21 +804,28 @@ function EditReviewModal({ review, onClose, onSave }) {
   const [qualityRating, setQualityRating] = useState(review.qualityRating || 0);
   const [serviceRating, setServiceRating] = useState(review.serviceRating || 0);
   const [valueRating, setValueRating] = useState(review.valueRating || 0);
-  const [locationRating, setLocationRating] = useState(review.locationRating || 0);
+  const [locationRating, setLocationRating] = useState(
+    review.locationRating || 0,
+  );
   const [saving, setSaving] = useState(false);
 
   // Photo management state
   const [existingMedia, setExistingMedia] = useState(review.mediaItems || []);
   const [newPhotos, setNewPhotos] = useState([]);
   const [coverMediaId, setCoverMediaId] = useState(
-    review.coverMediaId || review.mediaItems[0]?.id || null
+    review.coverMediaId || review.mediaItems[0]?.id || null,
   );
   const [newCoverIndex, setNewCoverIndex] = useState(null);
 
   const renderStars = (rating, onPress) => {
     return [...Array(5)].map((_, i) => (
       <TouchableOpacity key={i} onPress={() => onPress(i + 1)}>
-        <Text style={[styles.star, i < rating ? styles.starFilled : styles.starEmpty]}>
+        <Text
+          style={[
+            styles.star,
+            i < rating ? styles.starFilled : styles.starEmpty,
+          ]}
+        >
           ★
         </Text>
       </TouchableOpacity>
@@ -737,10 +833,14 @@ function EditReviewModal({ review, onClose, onSave }) {
   };
 
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission Required", "Please grant permission to access your photos.");
+      Alert.alert(
+        "Permission Required",
+        "Please grant permission to access your photos.",
+      );
       return;
     }
 
@@ -831,7 +931,7 @@ function EditReviewModal({ review, onClose, onSave }) {
 
       // Delete removed existing media
       const removedMedia = review.mediaItems.filter(
-        (m) => !existingMedia.find((em) => em.id === m.id)
+        (m) => !existingMedia.find((em) => em.id === m.id),
       );
       for (const media of removedMedia) {
         try {
@@ -867,7 +967,12 @@ function EditReviewModal({ review, onClose, onSave }) {
   };
 
   return (
-    <Modal visible={true} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal
+      visible={true}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -881,7 +986,10 @@ function EditReviewModal({ review, onClose, onSave }) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
+          <ScrollView
+            style={styles.modalBody}
+            contentContainerStyle={styles.modalBodyContent}
+          >
             {/* Review Notes */}
             <View style={styles.editSection}>
               <Text style={styles.editLabel}>Your Review</Text>
@@ -937,17 +1045,23 @@ function EditReviewModal({ review, onClose, onSave }) {
 
               <View style={styles.ratingInput}>
                 <Text style={styles.editLabel}>Quality</Text>
-                <View style={styles.starsRow}>{renderStars(qualityRating, setQualityRating)}</View>
+                <View style={styles.starsRow}>
+                  {renderStars(qualityRating, setQualityRating)}
+                </View>
               </View>
 
               <View style={styles.ratingInput}>
                 <Text style={styles.editLabel}>Service</Text>
-                <View style={styles.starsRow}>{renderStars(serviceRating, setServiceRating)}</View>
+                <View style={styles.starsRow}>
+                  {renderStars(serviceRating, setServiceRating)}
+                </View>
               </View>
 
               <View style={styles.ratingInput}>
                 <Text style={styles.editLabel}>Value</Text>
-                <View style={styles.starsRow}>{renderStars(valueRating, setValueRating)}</View>
+                <View style={styles.starsRow}>
+                  {renderStars(valueRating, setValueRating)}
+                </View>
               </View>
 
               <View style={styles.ratingInput}>
@@ -973,7 +1087,10 @@ function EditReviewModal({ review, onClose, onSave }) {
                   <View style={styles.photosGrid}>
                     {existingMedia.map((media) => (
                       <View key={media.id} style={styles.photoItem}>
-                        <Image source={{ uri: media.downloadURL }} style={styles.editPhotoThumbnail} />
+                        <Image
+                          source={{ uri: media.downloadURL }}
+                          style={styles.editPhotoThumbnail}
+                        />
                         <View style={styles.photoOverlay}>
                           {media.type === "image" && (
                             <TouchableOpacity
@@ -989,14 +1106,18 @@ function EditReviewModal({ review, onClose, onSave }) {
                               }}
                             >
                               <Text style={styles.photoActionText}>
-                                {coverMediaId === media.id && newCoverIndex === null
+                                {coverMediaId === media.id &&
+                                newCoverIndex === null
                                   ? "✓ Cover"
                                   : "Set Cover"}
                               </Text>
                             </TouchableOpacity>
                           )}
                           <TouchableOpacity
-                            style={[styles.photoActionButton, styles.photoActionButtonDelete]}
+                            style={[
+                              styles.photoActionButton,
+                              styles.photoActionButtonDelete,
+                            ]}
                             onPress={() => removeExistingMedia(media.id)}
                           >
                             <Text style={styles.photoActionText}>Remove</Text>
@@ -1015,12 +1136,16 @@ function EditReviewModal({ review, onClose, onSave }) {
                   <View style={styles.photosGrid}>
                     {newPhotos.map((photo, index) => (
                       <View key={index} style={styles.photoItem}>
-                        <Image source={{ uri: photo.uri }} style={styles.editPhotoThumbnail} />
+                        <Image
+                          source={{ uri: photo.uri }}
+                          style={styles.editPhotoThumbnail}
+                        />
                         <View style={styles.photoOverlay}>
                           <TouchableOpacity
                             style={[
                               styles.photoActionButton,
-                              newCoverIndex === index && styles.photoActionButtonActive,
+                              newCoverIndex === index &&
+                                styles.photoActionButtonActive,
                             ]}
                             onPress={() => {
                               setNewCoverIndex(index);
@@ -1028,11 +1153,16 @@ function EditReviewModal({ review, onClose, onSave }) {
                             }}
                           >
                             <Text style={styles.photoActionText}>
-                              {newCoverIndex === index ? "✓ Cover" : "Set Cover"}
+                              {newCoverIndex === index
+                                ? "✓ Cover"
+                                : "Set Cover"}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={[styles.photoActionButton, styles.photoActionButtonDelete]}
+                            style={[
+                              styles.photoActionButton,
+                              styles.photoActionButtonDelete,
+                            ]}
                             onPress={() => removeNewPhoto(index)}
                           >
                             <Text style={styles.photoActionText}>Remove</Text>
@@ -1071,7 +1201,15 @@ function EditReviewModal({ review, onClose, onSave }) {
   );
 }
 
-function AddReviewModal({ placeName, city, country, type, userId, onClose, onSave }) {
+function AddReviewModal({
+  placeName,
+  city,
+  country,
+  type,
+  userId,
+  onClose,
+  onSave,
+}) {
   const [notes, setNotes] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [qualityRating, setQualityRating] = useState(0);
@@ -1103,7 +1241,7 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
     try {
       // Find or create a trip for this user to store the review
       const tripsSnapshot = await getDocs(
-        query(collection(db, "trips"), where("ownerId", "==", userId))
+        query(collection(db, "trips"), where("ownerId", "==", userId)),
       );
 
       let tripId;
@@ -1146,20 +1284,23 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
       const subcollection = subcollectionMap[type];
 
       // Add the review to the appropriate subcollection
-      const reviewDoc = await addDoc(collection(db, "trips", tripId, subcollection), {
-        name: placeName,
-        city: city,
-        country: country,
-        review: notes,
-        notes: notes,
-        qualityRating: qualityRating,
-        serviceRating: serviceRating,
-        valueRating: valueRating,
-        locationRating: locationRating,
-        startDate: visitDate || null,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+      const reviewDoc = await addDoc(
+        collection(db, "trips", tripId, subcollection),
+        {
+          name: placeName,
+          city: city,
+          country: country,
+          review: notes,
+          notes: notes,
+          qualityRating: qualityRating,
+          serviceRating: serviceRating,
+          valueRating: valueRating,
+          locationRating: locationRating,
+          startDate: visitDate || null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      );
 
       // Upload photos if any
       if (photos.length > 0) {
@@ -1168,7 +1309,10 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
             const response = await fetch(photo.uri);
             const blob = await response.blob();
             const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-            const photoRef = storageRef(storage, `trips/${tripId}/media/${filename}`);
+            const photoRef = storageRef(
+              storage,
+              `trips/${tripId}/media/${filename}`,
+            );
             await uploadBytes(photoRef, blob);
             const downloadURL = await getDownloadURL(photoRef);
 
@@ -1204,7 +1348,14 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
       <View style={styles.addReviewStars}>
         {[1, 2, 3, 4, 5].map((star) => (
           <TouchableOpacity key={star} onPress={() => setRating(star)}>
-            <Text style={[styles.addReviewStar, star <= rating && styles.addReviewStarFilled]}>★</Text>
+            <Text
+              style={[
+                styles.addReviewStar,
+                star <= rating && styles.addReviewStarFilled,
+              ]}
+            >
+              ★
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -1212,7 +1363,12 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
   );
 
   return (
-    <Modal visible={true} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal
+      visible={true}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
       <View style={styles.addReviewOverlay}>
         <View style={styles.addReviewContainer}>
           {/* Header */}
@@ -1220,9 +1376,14 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
             <View style={{ flex: 1 }}>
               <Text style={styles.addReviewTitle}>Add Your Review</Text>
               <Text style={styles.addReviewPlaceName}>{placeName}</Text>
-              <Text style={styles.addReviewLocation}>{city}, {country}</Text>
+              <Text style={styles.addReviewLocation}>
+                {city}, {country}
+              </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.addReviewCloseBtn}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.addReviewCloseBtn}
+            >
               <Text style={styles.addReviewCloseText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -1231,7 +1392,9 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
           <ScrollView style={styles.addReviewForm}>
             {/* Visit Date */}
             <View style={styles.addReviewField}>
-              <Text style={styles.addReviewFieldLabel}>Visit Date (Optional)</Text>
+              <Text style={styles.addReviewFieldLabel}>
+                Visit Date (Optional)
+              </Text>
               <TextInput
                 style={styles.addReviewFieldInput}
                 value={visitDate}
@@ -1245,7 +1408,10 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
             <View style={styles.addReviewField}>
               <Text style={styles.addReviewFieldLabel}>Your Review</Text>
               <TextInput
-                style={[styles.addReviewFieldInput, { height: 120, textAlignVertical: "top" }]}
+                style={[
+                  styles.addReviewFieldInput,
+                  { height: 120, textAlignVertical: "top" },
+                ]}
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Share your experience..."
@@ -1262,14 +1428,21 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
                 {renderStarSelector(qualityRating, setQualityRating, "Quality")}
                 {renderStarSelector(serviceRating, setServiceRating, "Service")}
                 {renderStarSelector(valueRating, setValueRating, "Value")}
-                {renderStarSelector(locationRating, setLocationRating, "Location")}
+                {renderStarSelector(
+                  locationRating,
+                  setLocationRating,
+                  "Location",
+                )}
               </View>
             </View>
 
             {/* Photos */}
             <View style={styles.addReviewField}>
               <Text style={styles.addReviewFieldLabel}>Photos (Optional)</Text>
-              <TouchableOpacity style={styles.addPhotoButton} onPress={pickPhotos}>
+              <TouchableOpacity
+                style={styles.addPhotoButton}
+                onPress={pickPhotos}
+              >
                 <Ionicons name="camera-outline" size={24} color="#66bfcc" />
                 <Text style={styles.addPhotoButtonText}>Add Photos</Text>
               </TouchableOpacity>
@@ -1278,12 +1451,19 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
                 <View style={styles.photoPreviewGrid}>
                   {photos.map((photo, index) => (
                     <View key={index} style={styles.photoPreviewItem}>
-                      <Image source={{ uri: photo.uri }} style={styles.photoPreviewImage} />
+                      <Image
+                        source={{ uri: photo.uri }}
+                        style={styles.photoPreviewImage}
+                      />
                       <TouchableOpacity
                         style={styles.photoRemoveButton}
                         onPress={() => removePhoto(index)}
                       >
-                        <Ionicons name="close-circle" size={24} color="#ff4444" />
+                        <Ionicons
+                          name="close-circle"
+                          size={24}
+                          color="#ff4444"
+                        />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -1320,10 +1500,12 @@ function AddReviewModal({ placeName, city, country, type, userId, onClose, onSav
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+
     backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
+    marginTop: 20,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: COLORS.background,
@@ -1335,6 +1517,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: "#2c3e50",
+    marginTop: 20,
     padding: scaleSpacing(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
@@ -1813,7 +1996,7 @@ const styles = StyleSheet.create({
   },
   editActionButtonText: {
     color: COLORS.white,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "500",
   },
   // Add Review Modal Styles
@@ -1822,12 +2005,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
   },
   addReviewContainer: {
     backgroundColor: "#2c3e50",
-    borderRadius: 8,
-    width: "100%",
+    borderRadius: isTablet ? 12 : 8,
+    width: isTablet ? "85%" : "100%",
     maxHeight: "90%",
     overflow: "hidden",
   },
@@ -1835,82 +2018,82 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    padding: SPACING.lg,
+    padding: scaleSpacing(SPACING.lg),
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
   },
   addReviewTitle: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     fontWeight: "bold",
     color: COLORS.white,
-    marginBottom: 4,
+    marginBottom: scaleSpacing(4),
   },
   addReviewPlaceName: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: "rgba(255,255,255,0.7)",
-    marginTop: 4,
+    marginTop: scaleSpacing(4),
   },
   addReviewLocation: {
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
     color: "rgba(255,255,255,0.6)",
-    marginTop: 2,
+    marginTop: scaleSpacing(2),
   },
   addReviewCloseBtn: {
-    padding: 8,
+    padding: scaleSpacing(8),
   },
   addReviewCloseText: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: COLORS.white,
   },
   addReviewForm: {
-    padding: SPACING.lg,
+    padding: scaleSpacing(SPACING.lg),
   },
   addReviewField: {
-    marginBottom: SPACING.lg,
+    marginBottom: scaleSpacing(SPACING.lg),
   },
   addReviewFieldLabel: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "500",
     color: COLORS.white,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   addReviewFieldInput: {
     backgroundColor: "#3d5266",
     color: COLORS.white,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: 14,
+    borderRadius: isTablet ? 12 : 8,
+    paddingHorizontal: scaleSpacing(SPACING.md),
+    paddingVertical: scaleSpacing(SPACING.sm),
+    fontSize: scaleFontSize(14),
   },
   addReviewRatingsTitle: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
     color: COLORS.white,
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   addReviewRatingsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: SPACING.md,
+    gap: scaleSpacing(SPACING.md),
   },
   addReviewRatingItem: {
-    width: "47%",
-    marginBottom: SPACING.sm,
+    width: isTablet ? "30%" : "47%",
+    marginBottom: scaleSpacing(SPACING.sm),
   },
   addReviewRatingLabel: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "500",
     color: COLORS.white,
-    marginBottom: 4,
+    marginBottom: scaleSpacing(4),
   },
   addReviewStars: {
     flexDirection: "row",
-    gap: 4,
+    gap: scaleSpacing(4),
   },
   addReviewStar: {
-    fontSize: 24,
+    fontSize: scaleFontSize(24),
     color: "#888",
   },
   addReviewStarFilled: {
@@ -1918,15 +2101,15 @@ const styles = StyleSheet.create({
   },
   addReviewFooter: {
     flexDirection: "row",
-    gap: SPACING.sm,
-    padding: SPACING.lg,
+    gap: scaleSpacing(SPACING.sm),
+    padding: scaleSpacing(SPACING.lg),
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.1)",
   },
   addReviewFooterBtn: {
     flex: 1,
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    paddingVertical: scaleSpacing(SPACING.sm),
+    borderRadius: isTablet ? 12 : 8,
     alignItems: "center",
   },
   addReviewCancelButton: {
@@ -1934,14 +2117,14 @@ const styles = StyleSheet.create({
   },
   addReviewCancelBtnText: {
     color: COLORS.white,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   addReviewSubmitButton: {
     backgroundColor: "#66bfcc",
   },
   addReviewSubmitBtnText: {
     color: COLORS.white,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "500",
   },
   addPhotoButton: {
@@ -1951,37 +2134,37 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(102, 191, 204, 0.1)",
     borderWidth: 1,
     borderColor: "#66bfcc",
-    borderRadius: 8,
-    padding: SPACING.md,
-    gap: SPACING.xs,
-    marginTop: SPACING.xs,
+    borderRadius: isTablet ? 12 : 8,
+    padding: scaleSpacing(SPACING.md),
+    gap: scaleSpacing(SPACING.xs),
+    marginTop: scaleSpacing(SPACING.xs),
   },
   addPhotoButtonText: {
     color: "#66bfcc",
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "500",
   },
   photoPreviewGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
+    gap: scaleSpacing(SPACING.sm),
+    marginTop: scaleSpacing(SPACING.sm),
   },
   photoPreviewItem: {
-    width: 100,
-    height: 100,
+    width: isTablet ? 150 : 100,
+    height: isTablet ? 150 : 100,
     position: "relative",
   },
   photoPreviewImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 8,
+    borderRadius: isTablet ? 12 : 8,
   },
   photoRemoveButton: {
     position: "absolute",
-    top: -8,
-    right: -8,
+    top: isTablet ? -10 : -8,
+    right: isTablet ? -10 : -8,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: isTablet ? 16 : 12,
   },
 });

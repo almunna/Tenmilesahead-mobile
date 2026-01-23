@@ -16,32 +16,28 @@ export const isTablet = SCREEN_WIDTH > 600;
 // Scale factor based on screen width
 const scale = SCREEN_WIDTH / baseWidth;
 
-// Moderate scale - less aggressive scaling for tablets
+// Moderate scale - phones stay normal, tablets get larger
 export const moderateScale = (size, factor = 0.5) => {
-  const newSize = size + (scale - 1) * size * factor;
-  // For tablets, apply additional scaling
   if (isTablet) {
-    return Math.round(PixelRatio.roundToNearestPixel(newSize * 1.3));
+    return Math.round(size * 1.5); // 50% larger on tablets
   }
-  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+  return size; // Normal size on phones
 };
 
-// Font scaling with tablet support
+// Font scaling - phones stay normal, tablets get larger text
 export const scaleFontSize = (size) => {
-  const newSize = size * scale;
   if (isTablet) {
-    // Tablets get 40% larger fonts
-    return Math.round(PixelRatio.roundToNearestPixel(newSize * 1.4));
+    return Math.round(size * 1.5); // 50% larger fonts on tablets
   }
-  return Math.round(PixelRatio.roundToNearestPixel(newSize));
+  return size; // Normal size on phones
 };
 
-// Spacing scaling
+// Spacing scaling - phones stay normal, tablets get larger spacing
 export const scaleSpacing = (size) => {
   if (isTablet) {
-    return Math.round(size * 1.5);
+    return Math.round(size * 1.3); // 30% larger spacing on tablets
   }
-  return size;
+  return size; // Normal size on phones
 };
 
 // Transportation options

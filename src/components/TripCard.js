@@ -10,7 +10,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { COLORS, SPACING, SCREENS } from "../lib/constants";
+import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 import { dateRangeOf } from "../lib/utils";
 
 const { width } = Dimensions.get("window");
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 16,
     overflow: "hidden",
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   coverContainer: {
     width: "100%",
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   videoIcon: {
-    fontSize: 32,
+    fontSize: scaleFontSize(32),
     color: COLORS.white,
   },
   noCover: {
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   },
   noCoverText: {
     color: COLORS.muted,
-    fontSize: 12,
+    fontSize: scaleFontSize(12),
   },
   gradient: {
     position: "absolute",
@@ -232,71 +232,71 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   tripName: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "600",
     color: COLORS.white,
     marginBottom: 2,
   },
   tripDates: {
-    fontSize: 11,
+    fontSize: scaleFontSize(11),
     color: COLORS.white,
     opacity: 0.8,
   },
   photoCounter: {
     position: "absolute",
-    top: SPACING.xs,
-    left: SPACING.xs,
+    top: scaleSpacing(SPACING.xs),
+    left: scaleSpacing(SPACING.xs),
     backgroundColor: "rgba(0,0,0,0.6)",
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+    paddingVertical: scaleSpacing(2),
+    paddingHorizontal: scaleSpacing(6),
     borderRadius: 4,
   },
   photoCounterText: {
-    fontSize: 10,
+    fontSize: scaleFontSize(10),
     color: COLORS.white,
   },
   navArrow: {
     position: "absolute",
     top: "50%",
-    marginTop: -16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    marginTop: scaleFontSize(-16),
+    width: scaleFontSize(32),
+    height: scaleFontSize(32),
+    borderRadius: scaleFontSize(16),
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
   },
   navArrowLeft: {
-    left: SPACING.xs,
+    left: scaleSpacing(SPACING.xs),
   },
   navArrowRight: {
-    right: SPACING.xs,
+    right: scaleSpacing(SPACING.xs),
   },
   navArrowText: {
-    fontSize: 20,
+    fontSize: scaleFontSize(20),
     color: COLORS.white,
     fontWeight: "bold",
   },
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    padding: SPACING.sm,
-    gap: SPACING.sm,
+    padding: scaleSpacing(SPACING.sm),
+    gap: scaleSpacing(SPACING.sm),
   },
   actionButton: {
-    width: 36,
-    height: 36,
+    width: scaleFontSize(36),
+    height: scaleFontSize(36),
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   actionIcon: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     color: COLORS.white,
   },
   deleteButton: {
@@ -305,13 +305,13 @@ const styles = StyleSheet.create({
   viewButton: {
     flex: 1,
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.sm,
+    paddingVertical: scaleSpacing(SPACING.sm),
     borderRadius: 8,
     alignItems: "center",
   },
   viewButtonText: {
     color: COLORS.white,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "600",
   },
 });

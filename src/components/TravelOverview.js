@@ -1,6 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { COLORS, SPACING } from "../lib/constants";
+import { View, Text, StyleSheet } from "react-native";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 export default function TravelOverview({ stats }) {
   return (
@@ -164,64 +164,64 @@ function AccommodationStat({ icon, count, label }) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "700",
     color: COLORS.foreground,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   categorySection: {
     backgroundColor: "#2c3e50",
     borderRadius: 8,
-    padding: SPACING.sm,
-    marginBottom: SPACING.xs,
+    padding: scaleSpacing(SPACING.sm),
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   categoryTitle: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   categoryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: SPACING.xs,
-    marginBottom: SPACING.xs,
+    gap: scaleSpacing(SPACING.xs),
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   transportStatCard: {
     backgroundColor: "#3d5266",
     borderRadius: 8,
-    padding: SPACING.xs,
-    paddingVertical: SPACING.sm,
+    padding: scaleSpacing(SPACING.xs),
+    paddingVertical: scaleSpacing(SPACING.sm),
     flexDirection: "row",
     alignItems: "center",
     width: "49%",
-    minHeight: 55,
+    minHeight: scaleFontSize(55),
   },
   transportIcon: {
-    fontSize: 22,
-    marginRight: SPACING.xs,
+    fontSize: scaleFontSize(22),
+    marginRight: scaleSpacing(SPACING.xs),
   },
   transportInfo: {
     flex: 1,
   },
   transportCount: {
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
     fontWeight: "700",
     color: "#FFFFFF",
-    lineHeight: 20,
+    lineHeight: scaleFontSize(20),
   },
   transportLabel: {
-    fontSize: 9,
+    fontSize: scaleFontSize(9),
     color: "rgba(255, 255, 255, 0.9)",
     marginTop: 1,
   },
   footnote: {
-    fontSize: 9,
+    fontSize: scaleFontSize(9),
     color: COLORS.muted,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginTop: scaleSpacing(SPACING.xs),
   },
 });

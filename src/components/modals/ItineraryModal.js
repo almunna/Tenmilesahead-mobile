@@ -11,8 +11,6 @@ import {
 import {
   collection,
   getDocs,
-  doc,
-  getDoc,
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import ModalShell from "./ModalShell";
@@ -35,28 +33,6 @@ export default function ItineraryModal({ tripId, visible, onClose }) {
   async function fetchAllItems() {
     try {
       const allItems = [];
-
-      // Fetch the main trip to add as primary destination
-      const tripDoc = await getDoc(doc(db, "trips", tripId));
-      if (tripDoc.exists()) {
-        const trip = tripDoc.data();
-        allItems.push({
-          id: "trip-destination",
-          type: "Primary Destination",
-          subcollection: "trip",
-          icon: "🌍",
-          name: trip.city || trip.country,
-          startDate: trip.startDate || "",
-          endDate: trip.endDate || "",
-          city: trip.city || "",
-          state: trip.state || "",
-          country: trip.country || "",
-          address: trip.specificAddress || "",
-          phoneNumber: "",
-          websiteUrl: "",
-          notes: "",
-        });
-      }
 
       // Fetch destinations
       const destSnap = await getDocs(collection(db, "trips", tripId, "destinations"));
@@ -150,12 +126,38 @@ export default function ItineraryModal({ tripId, visible, onClose }) {
         });
       });
 
-      // Sort by startDate chronologically
+      // Sort by startDate chronologically (matching web app logic)
+      const parseDate = (dateVal) => {
+        if (!dateVal) return 0;
+        // Handle Firestore Timestamp objects
+        if (dateVal && typeof dateVal.toDate === 'function') {
+          return dateVal.toDate().getTime();
+        }
+        if (dateVal && dateVal.seconds) {
+          return dateVal.seconds * 1000;
+        }
+        // Handle string formats
+        if (typeof dateVal === 'string') {
+          // Handle YYYY-MM-DD format
+          const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateVal);
+          if (isoMatch) {
+            return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3])).getTime();
+          }
+          // Handle MM/DD/YYYY format
+          const usMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(dateVal);
+          if (usMatch) {
+            return new Date(parseInt(usMatch[3]), parseInt(usMatch[1]) - 1, parseInt(usMatch[2])).getTime();
+          }
+        }
+        // Fallback to Date parsing
+        const parsed = new Date(dateVal).getTime();
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
       allItems.sort((a, b) => {
-        if (!a.startDate && !b.startDate) return 0;
-        if (!a.startDate) return 1;
-        if (!b.startDate) return -1;
-        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+        const sa = parseDate(a.startDate);
+        const sb = parseDate(b.startDate);
+        return sa - sb;
       });
 
       setItems(allItems);

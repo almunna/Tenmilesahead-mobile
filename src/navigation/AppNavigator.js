@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Text, View, StyleSheet, Image } from "react-native";
 import { useAuth } from "../components/AuthProvider";
-import { COLORS, SCREENS } from "../lib/constants";
+import { COLORS, SCREENS, scaleFontSize, scaleSpacing, isTablet } from "../lib/constants";
 
 // Import Screens
 import LandingScreen from "../screens/LandingScreen";
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
   header: {
     backgroundColor: COLORS.surface,
@@ -369,31 +369,33 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontWeight: "600",
-    fontSize: 18,
+    fontSize: scaleFontSize(18),
   },
   tabBar: {
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    height: 80,
-    paddingBottom: 20,
-    paddingTop: 10,
+    height: isTablet ? 110 : 85,
+    paddingBottom: isTablet ? 40 : 25,
+    paddingTop: isTablet ? 12 : 10,
   },
   tabIconContainer: {
     alignItems: "center",
     justifyContent: "center",
+    minWidth: isTablet ? 70 : 50,
   },
   tabIcon: {
-    fontSize: 24,
+    fontSize: isTablet ? 28 : 22,
     opacity: 0.6,
   },
   tabIconFocused: {
     opacity: 1,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: isTablet ? 16 : 9,
     color: COLORS.muted,
-    marginTop: 4,
+    marginTop: isTablet ? 4 : 2,
+    textAlign: "center",
   },
   tabLabelFocused: {
     color: COLORS.primary,
@@ -401,8 +403,8 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 4,
+    borderRadius: isTablet ? 10 : 6,
+    padding: isTablet ? 6 : 3,
     opacity: 0.7,
   },
   logoContainerFocused: {
@@ -414,7 +416,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   logoIcon: {
-    width: 28,
-    height: 28,
+    width: isTablet ? 32 : 24,
+    height: isTablet ? 32 : 24,
   },
 });

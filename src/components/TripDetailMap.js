@@ -30,6 +30,147 @@ const TRANSPORT_ICONS = {
   Other: `<circle cx="12" cy="12" r="8"/>`,
 };
 
+// Geocoding cache to avoid repeated API calls
+const geocodeCache = new Map();
+let lastRequestTime = 0;
+
+// Rate limiter: ensure at least 1.1 seconds between requests (Nominatim requires 1 req/sec)
+async function waitForRateLimit() {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < 1100) {
+    await new Promise(resolve => setTimeout(resolve, 1100 - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+}
+
+// Real geocoding using OpenStreetMap Nominatim API (same as web app)
+async function geocodeLocation(address, city, state, country) {
+  // Build cache key
+  const parts = [address, city, state, country].filter(Boolean).map(s => s.toLowerCase());
+  const cacheKey = parts.join(',');
+
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
+
+  try {
+    // Build query string
+    const queryParts = [];
+    if (address) queryParts.push(address);
+    if (city && (!country || city.toLowerCase() !== country.toLowerCase())) queryParts.push(city);
+    if (state) queryParts.push(state);
+    if (country) queryParts.push(country);
+
+    const query = encodeURIComponent(queryParts.join(', '));
+
+    await waitForRateLimit();
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`,
+      {
+        headers: {
+          'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Geocoding HTTP error: ${response.status}`);
+      geocodeCache.set(cacheKey, null);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      const coords = {
+        latitude: parseFloat(data[0].lat),
+        longitude: parseFloat(data[0].lon),
+      };
+      geocodeCache.set(cacheKey, coords);
+      return coords;
+    }
+
+    // Fallback 1: Try without address (city + state + country)
+    if (address && city) {
+      const fallbackParts = [city, state, country].filter(Boolean);
+      const fallbackQuery = encodeURIComponent(fallbackParts.join(', '));
+      const fallbackCacheKey = fallbackParts.join(',').toLowerCase();
+
+      if (geocodeCache.has(fallbackCacheKey)) {
+        const cached = geocodeCache.get(fallbackCacheKey);
+        geocodeCache.set(cacheKey, cached);
+        return cached;
+      }
+
+      await waitForRateLimit();
+      const fallbackResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${fallbackQuery}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
+          },
+        }
+      );
+
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        if (fallbackData && fallbackData.length > 0) {
+          const coords = {
+            latitude: parseFloat(fallbackData[0].lat),
+            longitude: parseFloat(fallbackData[0].lon),
+          };
+          geocodeCache.set(fallbackCacheKey, coords);
+          geocodeCache.set(cacheKey, coords);
+          return coords;
+        }
+      }
+    }
+
+    // Fallback 2: Try just country
+    if (country) {
+      const countryCacheKey = country.toLowerCase();
+
+      if (geocodeCache.has(countryCacheKey)) {
+        const cached = geocodeCache.get(countryCacheKey);
+        geocodeCache.set(cacheKey, cached);
+        return cached;
+      }
+
+      await waitForRateLimit();
+      const countryResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(country)}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
+          },
+        }
+      );
+
+      if (countryResponse.ok) {
+        const countryData = await countryResponse.json();
+        if (countryData && countryData.length > 0) {
+          const coords = {
+            latitude: parseFloat(countryData[0].lat),
+            longitude: parseFloat(countryData[0].lon),
+          };
+          geocodeCache.set(countryCacheKey, coords);
+          geocodeCache.set(cacheKey, coords);
+          return coords;
+        }
+      }
+    }
+
+    geocodeCache.set(cacheKey, null);
+    return null;
+  } catch (error) {
+    console.error(`Error geocoding ${city}, ${country}:`, error);
+    geocodeCache.set(cacheKey, null);
+    return null;
+  }
+}
+
 export default function TripDetailMap({
   trip,
   destinations,
@@ -37,9 +178,15 @@ export default function TripDetailMap({
   restaurants,
 }) {
   const [loading, setLoading] = useState(true);
+  const [mapHTML, setMapHTML] = useState(null);
 
-  // Generate HTML with Leaflet map
-  const generateMapHTML = () => {
+  // Generate map HTML asynchronously with real geocoding
+  useEffect(() => {
+    generateMapHTMLAsync();
+  }, [trip, destinations, activities, restaurants]);
+
+  async function generateMapHTMLAsync() {
+    setLoading(true);
     // Prepare markers data
     const markers = [];
 
@@ -64,7 +211,7 @@ export default function TripDetailMap({
 
     // Add origin marker if available
     if (trip.originCity && trip.originCountry) {
-      const coords = getCoordinates(
+      const coords = await geocodeLocation(
         trip.originAddress,
         trip.originCity,
         trip.originState,
@@ -87,13 +234,13 @@ export default function TripDetailMap({
     }
 
     // Add destination markers
-    destinations.forEach((dest) => {
-      if (dest.onShip) return;
+    for (const dest of destinations) {
+      if (dest.onShip) continue;
       const city = dest.city || trip.city;
       const country = dest.country || trip.country;
-      if (!city || !country) return;
+      if (!city || !country) continue;
 
-      const coords = getCoordinates(dest.address, city, dest.state, country);
+      const coords = await geocodeLocation(dest.address, city, dest.state, country);
       if (coords) {
         markers.push({
           lat: coords.latitude,
@@ -109,16 +256,16 @@ export default function TripDetailMap({
           startDate: dest.startDate,
         });
       }
-    });
+    }
 
     // Add activity markers
-    activities.forEach((act) => {
-      if (act.onShip) return;
+    for (const act of activities) {
+      if (act.onShip) continue;
       const city = act.city || trip.city;
       const country = act.country || trip.country;
-      if (!city || !country) return;
+      if (!city || !country) continue;
 
-      const coords = getCoordinates(act.address, city, act.state, country);
+      const coords = await geocodeLocation(act.address, city, act.state, country);
       if (coords) {
         markers.push({
           lat: coords.latitude,
@@ -134,16 +281,16 @@ export default function TripDetailMap({
           startDate: act.startDate,
         });
       }
-    });
+    }
 
     // Add restaurant markers
-    restaurants.forEach((rest) => {
-      if (rest.onShip) return;
+    for (const rest of restaurants) {
+      if (rest.onShip) continue;
       const city = rest.city || trip.city;
       const country = rest.country || trip.country;
-      if (!city || !country) return;
+      if (!city || !country) continue;
 
-      const coords = getCoordinates(rest.address, city, rest.state, country);
+      const coords = await geocodeLocation(rest.address, city, rest.state, country);
       if (coords) {
         markers.push({
           lat: coords.latitude,
@@ -159,11 +306,11 @@ export default function TripDetailMap({
           startDate: rest.startDate,
         });
       }
-    });
+    }
 
     const markersJSON = JSON.stringify(markers);
 
-    return `
+    const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -290,7 +437,9 @@ export default function TripDetailMap({
         popupAnchor: [0, -42],
       });
 
-      const m = L.marker([marker.lat, marker.lng], { icon }).addTo(map);
+      // Give origin (starting point) higher z-index to show on top when overlapping
+      const zIndexOffset = marker.type === 'origin' ? 1000 : 0;
+      const m = L.marker([marker.lat, marker.lng], { icon, zIndexOffset }).addTo(map);
 
       const typeLabel = marker.type.charAt(0).toUpperCase() + marker.type.slice(1);
       const color = colorMap[marker.type];
@@ -345,88 +494,9 @@ export default function TripDetailMap({
 </body>
 </html>
     `;
-  };
 
-  function getCoordinates(address, city, state, country) {
-    // Use approximate coordinates based on country (same logic as WorldMap)
-    const countryCoordinates = getCountryCoordinates(country);
-    if (countryCoordinates) {
-      // Add small random offset to prevent overlapping pins
-      const offset = 0.5;
-      return {
-        latitude: countryCoordinates.latitude + (Math.random() - 0.5) * offset,
-        longitude:
-          countryCoordinates.longitude + (Math.random() - 0.5) * offset,
-      };
-    }
-    return null;
-  }
-
-  function getCountryCoordinates(country) {
-    const coordinates = {
-      "United States": { latitude: 37.0902, longitude: -95.7129 },
-      USA: { latitude: 37.0902, longitude: -95.7129 },
-      US: { latitude: 37.0902, longitude: -95.7129 },
-      Canada: { latitude: 56.1304, longitude: -106.3468 },
-      Mexico: { latitude: 23.6345, longitude: -102.5528 },
-      "United Kingdom": { latitude: 55.3781, longitude: -3.436 },
-      UK: { latitude: 55.3781, longitude: -3.436 },
-      France: { latitude: 46.2276, longitude: 2.2137 },
-      Germany: { latitude: 51.1657, longitude: 10.4515 },
-      Italy: { latitude: 41.8719, longitude: 12.5674 },
-      Spain: { latitude: 40.4637, longitude: -3.7492 },
-      Japan: { latitude: 36.2048, longitude: 138.2529 },
-      China: { latitude: 35.8617, longitude: 104.1954 },
-      India: { latitude: 20.5937, longitude: 78.9629 },
-      Australia: { latitude: -25.2744, longitude: 133.7751 },
-      Brazil: { latitude: -14.235, longitude: -51.9253 },
-      Argentina: { latitude: -38.4161, longitude: -63.6167 },
-      "South Africa": { latitude: -30.5595, longitude: 22.9375 },
-      Egypt: { latitude: 26.8206, longitude: 30.8025 },
-      Thailand: { latitude: 15.87, longitude: 100.9925 },
-      Greece: { latitude: 39.0742, longitude: 21.8243 },
-      Portugal: { latitude: 39.3999, longitude: -8.2245 },
-      Netherlands: { latitude: 52.1326, longitude: 5.2913 },
-      Switzerland: { latitude: 46.8182, longitude: 8.2275 },
-      Norway: { latitude: 60.472, longitude: 8.4689 },
-      Sweden: { latitude: 60.1282, longitude: 18.6435 },
-      Denmark: { latitude: 56.2639, longitude: 9.5018 },
-      Iceland: { latitude: 64.9631, longitude: -19.0208 },
-      Ireland: { latitude: 53.4129, longitude: -8.2439 },
-      "New Zealand": { latitude: -40.9006, longitude: 174.886 },
-      Singapore: { latitude: 1.3521, longitude: 103.8198 },
-      "South Korea": { latitude: 35.9078, longitude: 127.7669 },
-      Turkey: { latitude: 38.9637, longitude: 35.2433 },
-      Russia: { latitude: 61.524, longitude: 105.3188 },
-      Poland: { latitude: 51.9194, longitude: 19.1451 },
-      Austria: { latitude: 47.5162, longitude: 14.5501 },
-      Belgium: { latitude: 50.5039, longitude: 4.4699 },
-      Croatia: { latitude: 45.1, longitude: 15.2 },
-      "Czech Republic": { latitude: 49.8175, longitude: 15.473 },
-      Hungary: { latitude: 47.1625, longitude: 19.5033 },
-      Morocco: { latitude: 31.7917, longitude: -7.0926 },
-      Peru: { latitude: -9.19, longitude: -75.0152 },
-      Chile: { latitude: -35.6751, longitude: -71.543 },
-      Colombia: { latitude: 4.5709, longitude: -74.2973 },
-      Vietnam: { latitude: 14.0583, longitude: 108.2772 },
-      Indonesia: { latitude: -0.7893, longitude: 113.9213 },
-      Malaysia: { latitude: 4.2105, longitude: 101.9758 },
-      Philippines: { latitude: 12.8797, longitude: 121.774 },
-      Barbados: { latitude: 13.1939, longitude: -59.5432 },
-    };
-
-    if (coordinates[country]) {
-      return coordinates[country];
-    }
-
-    const countryLower = country?.toLowerCase() || "";
-    for (const [key, value] of Object.entries(coordinates)) {
-      if (key.toLowerCase() === countryLower) {
-        return value;
-      }
-    }
-
-    return { latitude: 20, longitude: 0 };
+    setMapHTML(html);
+    setLoading(false);
   }
 
   const hasContent =
@@ -469,22 +539,28 @@ export default function TripDetailMap({
 
       {/* Map WebView */}
       <View style={styles.mapContainer}>
-        <WebView
-          originWhitelist={["*"]}
-          source={{ html: generateMapHTML() }}
-          style={styles.webview}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          scrollEnabled={true}
-          nestedScrollEnabled={true}
-          onLoadEnd={() => setLoading(false)}
-          renderLoading={() => (
-            <View style={styles.webviewLoading}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            </View>
-          )}
-        />
+        {loading || !mapHTML ? (
+          <View style={styles.webviewLoading}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading map locations...</Text>
+          </View>
+        ) : (
+          <WebView
+            originWhitelist={["*"]}
+            source={{ html: mapHTML }}
+            style={styles.webview}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+            renderLoading={() => (
+              <View style={styles.webviewLoading}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              </View>
+            )}
+          />
+        )}
       </View>
     </View>
   );
@@ -547,5 +623,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: COLORS.surfaceLight,
+  },
+  loadingText: {
+    marginTop: SPACING.sm,
+    fontSize: 12,
+    color: COLORS.muted,
   },
 });

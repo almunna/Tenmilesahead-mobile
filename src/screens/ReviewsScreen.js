@@ -92,7 +92,10 @@ function ReviewsInner({ navigation }) {
 
       // Fetch all reviews in parallel for better performance
       const kindPromises = kinds.map(async (kind) => {
-        const qx = query(collectionGroup(db, kind), orderBy("createdAt", "desc"));
+        const qx = query(
+          collectionGroup(db, kind),
+          orderBy("createdAt", "desc"),
+        );
         const snap = await getDocs(qx);
         return { kind, docs: snap.docs };
       });
@@ -166,7 +169,10 @@ function ReviewsInner({ navigation }) {
       }
 
       const citySet = new Set(
-        all.map((r) => (r.city || "").trim()).filter(Boolean).sort()
+        all
+          .map((r) => (r.city || "").trim())
+          .filter(Boolean)
+          .sort(),
       );
       setCities(Array.from(citySet));
 
@@ -221,12 +227,16 @@ function ReviewsInner({ navigation }) {
                   collectionGroup(db, "media"),
                   where("tripId", "==", firstReview.tripId),
                   where("linkedSubcollection", "==", firstReview.kind),
-                  where("linkedId", "==", firstReview.id)
+                  where("linkedId", "==", firstReview.id),
                 );
                 const ms = await getDocs(qMedia);
                 for (const m of ms.docs) {
                   const d = m.data();
-                  if (d && (d.type === "image" || d.type === "video") && d.downloadURL) {
+                  if (
+                    d &&
+                    (d.type === "image" || d.type === "video") &&
+                    d.downloadURL
+                  ) {
                     out.thumbs.push({ url: d.downloadURL, type: d.type });
                     if (out.thumbs.length >= 3) break;
                   }
@@ -236,13 +246,14 @@ function ReviewsInner({ navigation }) {
               }
             }
             return out;
-          })
+          }),
         );
         withThumbs.push(...batchResults);
       }
 
       withThumbs.sort((a, b) => {
-        if (b.reviewCount !== a.reviewCount) return b.reviewCount - a.reviewCount;
+        if (b.reviewCount !== a.reviewCount)
+          return b.reviewCount - a.reviewCount;
         return a.name.localeCompare(b.name);
       });
 
@@ -257,7 +268,8 @@ function ReviewsInner({ navigation }) {
   const filtered = useMemo(() => {
     return tiles.filter((t) => {
       if (filterKind && t.kind !== filterKind) return false;
-      if (filterCity && t.city.toLowerCase() !== filterCity.toLowerCase()) return false;
+      if (filterCity && t.city.toLowerCase() !== filterCity.toLowerCase())
+        return false;
       return true;
     });
   }, [tiles, filterCity, filterKind]);
@@ -270,7 +282,9 @@ function ReviewsInner({ navigation }) {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteDoc(doc(db, "trips", review.tripId, review.kind, review.id));
+            await deleteDoc(
+              doc(db, "trips", review.tripId, review.kind, review.id),
+            );
             loadReviews();
             setOpenTile(null);
           } catch (error) {
@@ -327,7 +341,9 @@ function ReviewsInner({ navigation }) {
               onPress={() => setShowKindDropdown(!showKindDropdown)}
             >
               <Text style={styles.filterSelectText}>
-                {filterKind ? KIND_LABEL[filterKind] || filterKind : "All Types"}
+                {filterKind
+                  ? KIND_LABEL[filterKind] || filterKind
+                  : "All Types"}
               </Text>
               <Text style={styles.filterArrow}>▼</Text>
             </TouchableOpacity>
@@ -365,11 +381,16 @@ function ReviewsInner({ navigation }) {
 
       {/* Results Count */}
       <Text style={styles.resultsText}>
-        {filtered.length ? `Showing ${filtered.length} place${filtered.length > 1 ? "s" : ""}` : "No results with these filters."}
+        {filtered.length
+          ? `Showing ${filtered.length} place${filtered.length > 1 ? "s" : ""}`
+          : "No results with these filters."}
       </Text>
 
       {/* Tiles Grid */}
-      <ScrollView style={styles.tilesContainer} contentContainerStyle={styles.tilesContent}>
+      <ScrollView
+        style={styles.tilesContainer}
+        contentContainerStyle={styles.tilesContent}
+      >
         {filtered.map((tile) => (
           <TouchableOpacity
             key={tile.key}
@@ -383,11 +404,18 @@ function ReviewsInner({ navigation }) {
                   <Text style={styles.noThumbsText}>No photos yet</Text>
                 </View>
               ) : tile.thumbs.length === 1 ? (
-                <Image source={{ uri: tile.thumbs[0].url }} style={styles.singleThumb} />
+                <Image
+                  source={{ uri: tile.thumbs[0].url }}
+                  style={styles.singleThumb}
+                />
               ) : (
                 <View style={styles.multiThumbsRow}>
                   {tile.thumbs.map((thumb, idx) => (
-                    <Image key={idx} source={{ uri: thumb.url }} style={styles.multiThumb} />
+                    <Image
+                      key={idx}
+                      source={{ uri: thumb.url }}
+                      style={styles.multiThumb}
+                    />
                   ))}
                 </View>
               )}
@@ -396,18 +424,27 @@ function ReviewsInner({ navigation }) {
             {/* Tile Body */}
             <View style={styles.tileBody}>
               <View style={styles.tileHeader}>
-                <Text style={styles.tileName} numberOfLines={1}>{tile.name}</Text>
+                <Text style={styles.tileName} numberOfLines={1}>
+                  {tile.name}
+                </Text>
                 <View style={styles.tileBadge}>
-                  <Text style={styles.tileBadgeText}>{KIND_LABEL[tile.kind]}</Text>
+                  <Text style={styles.tileBadgeText}>
+                    {KIND_LABEL[tile.kind]}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.tileLocation}>
                 {tile.kind === "cruises"
                   ? [tile.cruiseLine, tile.shipName].filter(Boolean).join(" - ")
-                  : [tile.city, tile.state, tile.country].filter(Boolean).join(", ")}
+                  : [tile.city, tile.state, tile.country]
+                      .filter(Boolean)
+                      .join(", ")}
               </Text>
               <Text style={styles.tileReviewCount}>
-                <Text style={styles.tileReviewCountBold}>{tile.reviewCount}</Text> review{tile.reviewCount > 1 ? "s" : ""}
+                <Text style={styles.tileReviewCountBold}>
+                  {tile.reviewCount}
+                </Text>{" "}
+                review{tile.reviewCount > 1 ? "s" : ""}
               </Text>
             </View>
           </TouchableOpacity>
@@ -430,8 +467,12 @@ function ReviewsInner({ navigation }) {
                   <Text style={styles.modalSubtitle}>
                     {KIND_LABEL[openTile.kind]} •{" "}
                     {openTile.kind === "cruises"
-                      ? [openTile.cruiseLine, openTile.shipName].filter(Boolean).join(" - ")
-                      : [openTile.city, openTile.state, openTile.country].filter(Boolean).join(", ")}
+                      ? [openTile.cruiseLine, openTile.shipName]
+                          .filter(Boolean)
+                          .join(" - ")
+                      : [openTile.city, openTile.state, openTile.country]
+                          .filter(Boolean)
+                          .join(", ")}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -449,23 +490,32 @@ function ReviewsInner({ navigation }) {
                       <Text style={styles.reviewItemAuthor}>By traveler</Text>
                       <View style={styles.reviewItemActions}>
                         <Text style={styles.reviewItemDate}>
-                          {fmtMDY(r.startDate)}{r.endDate ? ` → ${fmtMDY(r.endDate)}` : ""}
+                          {fmtMDY(r.startDate)}
+                          {r.endDate ? ` → ${fmtMDY(r.endDate)}` : ""}
                         </Text>
                         {user?.uid === r.ownerId && (
                           <TouchableOpacity
                             style={styles.reviewDeleteButton}
                             onPress={() => handleDelete(r)}
                           >
-                            <Text style={styles.reviewDeleteButtonText}>Delete</Text>
+                            <Text style={styles.reviewDeleteButtonText}>
+                              Delete
+                            </Text>
                           </TouchableOpacity>
                         )}
                       </View>
                     </View>
                     <Text style={styles.reviewItemLocation}>
                       {r.kind === "cruises"
-                        ? [r.cruiseLine, r.shipName].filter(Boolean).join(" - ") || "—"
-                        : [r.address, r.city, r.state, r.country].filter(Boolean).join(", ") || "—"}
-                      {r.price != null ? ` • ${r.price}${r.priceUnit ? ` ${r.priceUnit}` : ""}` : ""}
+                        ? [r.cruiseLine, r.shipName]
+                            .filter(Boolean)
+                            .join(" - ") || "—"
+                        : [r.address, r.city, r.state, r.country]
+                            .filter(Boolean)
+                            .join(", ") || "—"}
+                      {r.price != null
+                        ? ` • ${r.price}${r.priceUnit ? ` ${r.priceUnit}` : ""}`
+                        : ""}
                     </Text>
                   </View>
                 ))}
@@ -475,7 +525,9 @@ function ReviewsInner({ navigation }) {
                 )}
 
                 <Text style={styles.tipText}>
-                  Tip: Photos/videos here come from the entries' uploads (Activities, Accommodations, Restaurants, Cruises). All photos also appear in each trip's flipbook.
+                  Tip: Photos/videos here come from the entries' uploads
+                  (Activities, Accommodations, Restaurants, Cruises). All photos
+                  also appear in each trip's flipbook.
                 </Text>
               </ScrollView>
             </View>

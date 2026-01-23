@@ -12,7 +12,7 @@ import {
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
-import { COLORS, SPACING, SCREENS } from "../lib/constants";
+import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 export default function SignupScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -174,65 +174,65 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: SPACING.lg,
+    padding: scaleSpacing(SPACING.lg),
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: SPACING.lg,
+    borderRadius: scaleFontSize(16),
+    padding: scaleSpacing(SPACING.lg),
   },
   title: {
-    fontSize: 28,
+    fontSize: scaleFontSize(28),
     fontWeight: "600",
     color: COLORS.foreground,
-    marginBottom: SPACING.lg,
+    marginBottom: scaleSpacing(SPACING.lg),
   },
   inputGroup: {
-    marginBottom: SPACING.md,
+    marginBottom: scaleSpacing(SPACING.md),
   },
   label: {
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.xs,
+    marginBottom: scaleSpacing(SPACING.xs),
   },
   input: {
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 8,
-    padding: SPACING.md,
+    borderRadius: scaleFontSize(8),
+    padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
   },
   errorText: {
     color: COLORS.error,
-    fontSize: 14,
-    marginBottom: SPACING.md,
+    fontSize: scaleFontSize(14),
+    marginBottom: scaleSpacing(SPACING.md),
   },
   button: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
+    paddingVertical: scaleSpacing(SPACING.md),
+    borderRadius: scaleFontSize(8),
     alignItems: "center",
-    marginTop: SPACING.sm,
+    marginTop: scaleSpacing(SPACING.sm),
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(16),
     fontWeight: "600",
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: SPACING.lg,
+    marginTop: scaleSpacing(SPACING.lg),
   },
   footerText: {
     color: COLORS.muted,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
   linkText: {
     color: COLORS.primary,
-    fontSize: 14,
+    fontSize: scaleFontSize(14),
   },
 });
