@@ -56,9 +56,12 @@ function ProfileInner({ navigation }) {
     }
   }
 
+  // Check subscription (must have valid status AND not expired)
   const subscription = profile?.subscription;
   const subscriptionStatus = subscription?.status || "none";
-  const isActive = subscriptionStatus === "active" || subscriptionStatus === "trialing";
+  const isActive =
+    (subscriptionStatus === "active" || subscriptionStatus === "trialing") &&
+    subscription?.currentPeriodEnd > Date.now();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

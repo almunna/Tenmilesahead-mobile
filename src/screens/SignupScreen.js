@@ -18,7 +18,9 @@ export default function SignupScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -120,26 +122,42 @@ export default function SignupScreen({ navigation }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Create a password"
-              placeholderTextColor={COLORS.muted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Create a password"
+                placeholderTextColor={COLORS.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <Text style={styles.eyeIcon}>{showPassword ? "👁" : "👁‍🗨"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm your password"
-              placeholderTextColor={COLORS.muted}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Confirm your password"
+                placeholderTextColor={COLORS.muted}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <Text style={styles.eyeIcon}>{showConfirmPassword ? "👁" : "👁‍🗨"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
@@ -201,6 +219,25 @@ const styles = StyleSheet.create({
     padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
     fontSize: scaleFontSize(16),
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: scaleFontSize(8),
+  },
+  passwordInput: {
+    flex: 1,
+    padding: scaleSpacing(SPACING.md),
+    color: COLORS.foreground,
+    fontSize: scaleFontSize(16),
+  },
+  eyeButton: {
+    padding: scaleSpacing(SPACING.md),
+  },
+  eyeIcon: {
+    fontSize: scaleFontSize(18),
+    color: COLORS.muted,
   },
   errorText: {
     color: COLORS.error,

@@ -7,10 +7,15 @@ import {
   TouchableOpacity,
   Image,
   Linking,
-  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
+import {
+  COLORS,
+  SPACING,
+  SCREENS,
+  scaleFontSize,
+  scaleSpacing,
+} from "../lib/constants";
 
 // FAQs data
 const faqs = [
@@ -132,9 +137,20 @@ function ValueItem({ title, text }) {
 }
 
 // Pricing Card Component
-function PricingCard({ label, badge, price, period, savings, bullets, highlight, onPress }) {
+function PricingCard({
+  label,
+  badge,
+  price,
+  period,
+  savings,
+  bullets,
+  highlight,
+  onPress,
+}) {
   return (
-    <View style={[styles.pricingCard, highlight && styles.pricingCardHighlight]}>
+    <View
+      style={[styles.pricingCard, highlight && styles.pricingCardHighlight]}
+    >
       {badge && (
         <View style={styles.pricingBadge}>
           <Text style={styles.pricingBadgeText}>{badge}</Text>
@@ -155,7 +171,9 @@ function PricingCard({ label, badge, price, period, savings, bullets, highlight,
         ))}
       </View>
       <TouchableOpacity style={styles.pricingButton} onPress={onPress}>
-        <Text style={styles.pricingButtonText}>Choose {label.split(" ")[0]}</Text>
+        <Text style={styles.pricingButtonText}>
+          Choose {label.split(" ")[0]}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -195,14 +213,6 @@ export default function LandingScreen() {
     navigation.navigate(SCREENS.SIGNUP);
   };
 
-  const openGooglePlay = () => {
-    Linking.openURL("https://play.google.com/store/apps/details?id=com.tenmilesahead");
-  };
-
-  const openAppStore = () => {
-    Linking.openURL("https://apps.apple.com/app/ten-miles-ahead");
-  };
-
   const openEmail = () => {
     Linking.openURL("mailto:admin@tenmilesahead.com");
   };
@@ -224,33 +234,34 @@ export default function LandingScreen() {
         <Text style={styles.heroSubtitle}>
           Ten Miles Ahead is the ultimate travel journal for modern explorers.
           Log your trips, create beautiful photo stories, and share your journey
-          with the world
+          with the world.
         </Text>
         <View style={styles.heroButtons}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleStartJourney}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleStartJourney}
+          >
             <Text style={styles.primaryButtonText}>Start Your Journey!</Text>
           </TouchableOpacity>
-          <View style={styles.storeButtons}>
-            <TouchableOpacity style={styles.storeButton} onPress={openGooglePlay}>
-              <Text style={styles.storeButtonText}>Google Play</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.storeButton} onPress={openAppStore}>
-              <Text style={styles.storeButtonText}>App Store</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
 
       {/* Features Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Everything You Need to Manage Your Trips</Text>
+        <Text style={styles.sectionTitle}>
+          Everything You Need to Manage Your Trips
+        </Text>
         <Text style={styles.sectionSubtitle}>
           Effortlessly document all your journeys, from weekend getaways to epic
           adventures across the globe.
         </Text>
         <View style={styles.featuresGrid}>
           {features.map((feature, index) => (
-            <FeatureCard key={index} title={feature.title} bullets={feature.bullets} />
+            <FeatureCard
+              key={index}
+              title={feature.title}
+              bullets={feature.bullets}
+            />
           ))}
         </View>
       </View>
@@ -258,7 +269,9 @@ export default function LandingScreen() {
       {/* Why Travelers Love Section */}
       <View style={styles.valueSection}>
         <View style={styles.valueCard}>
-          <Text style={styles.valueSectionTitle}>Why Travelers Love Ten Miles Ahead</Text>
+          <Text style={styles.valueSectionTitle}>
+            Why Travelers Love Ten Miles Ahead
+          </Text>
           <View style={styles.valueItems}>
             <ValueItem
               title="Save Time"
@@ -279,7 +292,9 @@ export default function LandingScreen() {
       {/* Pricing Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Simple, Affordable Pricing</Text>
-        <Text style={styles.sectionSubtitle}>Choose the plan that works for you</Text>
+        <Text style={styles.sectionSubtitle}>
+          Choose the plan that works for you
+        </Text>
         <View style={styles.pricingContainer}>
           <PricingCard
             label="Monthly Plan"
@@ -313,13 +328,17 @@ export default function LandingScreen() {
             onPress={handleSubscribe}
           />
         </View>
-        <Text style={styles.pricingNote}>Launch pricing — secure your rate.</Text>
+        <Text style={styles.pricingNote}>
+          Launch pricing — secure your rate.
+        </Text>
       </View>
 
       {/* FAQ Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
-        <Text style={styles.sectionSubtitle}>Get answers to common questions</Text>
+        <Text style={styles.sectionSubtitle}>
+          Get answers to common questions
+        </Text>
         <View style={styles.faqContainer}>
           {faqs.map((faq, index) => (
             <FAQItem key={index} question={faq.q} answer={faq.a} />
@@ -331,7 +350,9 @@ export default function LandingScreen() {
               <TouchableOpacity onPress={openEmail}>
                 <Text style={styles.linkText}>Contact Us</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate(SCREENS.FAQS)}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate(SCREENS.FAQS)}
+              >
                 <Text style={styles.linkText}>View All FAQs</Text>
               </TouchableOpacity>
             </View>
@@ -341,19 +362,27 @@ export default function LandingScreen() {
 
       {/* CTA Section */}
       <View style={styles.ctaSection}>
-        <Text style={styles.ctaTitle}>Ready to Transform Your Travel Journal?</Text>
+        <Text style={styles.ctaTitle}>
+          Ready to Transform Your Travel Journal?
+        </Text>
         <Text style={styles.ctaSubtitle}>
-          Join travelers already saving time and staying organized with Ten Miles Ahead.
+          Join travelers already saving time and staying organized with Ten
+          Miles Ahead.
         </Text>
         <View style={styles.ctaButtons}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleSubscribe}
+          >
             <Text style={styles.primaryButtonText}>Get Started</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSignIn}>
             <Text style={styles.linkText}>Sign in</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.ctaNote}>No setup. Cancel anytime. Secure payments.</Text>
+        <Text style={styles.ctaNote}>
+          No setup. Cancel anytime. Secure payments.
+        </Text>
       </View>
 
       {/* Bottom Spacing */}
@@ -427,20 +456,58 @@ const styles = StyleSheet.create({
   },
   storeButtons: {
     flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: scaleSpacing(SPACING.sm),
+    marginTop: scaleSpacing(SPACING.sm),
   },
-  storeButton: {
-    backgroundColor: COLORS.surfaceLight,
-    paddingHorizontal: scaleSpacing(SPACING.lg),
+  googlePlayBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#000",
+    paddingHorizontal: scaleSpacing(SPACING.md),
     paddingVertical: scaleSpacing(SPACING.sm),
     borderRadius: scaleFontSize(8),
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#a6a6a6",
+    gap: scaleSpacing(SPACING.sm),
   },
-  storeButtonText: {
-    color: COLORS.foreground,
+  appStoreBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#000",
+    paddingHorizontal: scaleSpacing(SPACING.md),
+    paddingVertical: scaleSpacing(SPACING.sm),
+    borderRadius: scaleFontSize(8),
+    borderWidth: 1,
+    borderColor: "#a6a6a6",
+    gap: scaleSpacing(SPACING.sm),
+  },
+  badgeIconContainer: {
+    width: scaleFontSize(24),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playIcon: {
+    fontSize: scaleFontSize(20),
+    color: "#34a853",
+  },
+  appleIcon: {
+    fontSize: scaleFontSize(22),
+    color: "#fff",
+  },
+  badgeTextContainer: {
+    alignItems: "flex-start",
+  },
+  badgeSmallText: {
+    fontSize: scaleFontSize(8),
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
+  badgeLargeText: {
     fontSize: scaleFontSize(14),
-    fontWeight: "500",
+    color: "#fff",
+    fontWeight: "600",
   },
   // Section Styles
   section: {

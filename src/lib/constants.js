@@ -131,14 +131,23 @@ export const SCREENS = {
   ADMIN_TUTORIALS: "AdminTutorials",
 };
 
+// ============================================
+// STRIPE CONFIGURATION - UPDATE THESE VALUES
+// ============================================
+
+// Your deployed web app URL
+export const API_BASE_URL = "https://tenmilesahead.com";
+
+// Stripe publishable key
+export const STRIPE_PUBLISHABLE_KEY = "pk_test_51RHzInLfV8BTXj9A0YEedXrCH1S3vigKBqYEGvNXt0GIzSQa1mEGBHTWmUqsn5IAFxLRTN4t64S3qpmC7Oo8nLSZ00KzGjpk59";
+
 // API endpoints (for Stripe and other services)
 export const API_ENDPOINTS = {
-  // These would typically point to your backend server
-  CREATE_CHECKOUT_SESSION: "YOUR_API_URL/stripe/create-checkout-session",
-  CREATE_SUBSCRIPTION: "YOUR_API_URL/stripe/create-subscription",
-  CANCEL_SUBSCRIPTION: "YOUR_API_URL/stripe/cancel-subscription",
-  VERIFY_SESSION: "YOUR_API_URL/stripe/verify-session",
-  GEOCODE: "YOUR_API_URL/geocode",
+  CREATE_CHECKOUT_SESSION: `${API_BASE_URL}/api/stripe/create-checkout-session`,
+  CREATE_SUBSCRIPTION: `${API_BASE_URL}/api/stripe/create-subscription`,
+  CANCEL_SUBSCRIPTION: `${API_BASE_URL}/api/stripe/cancel-subscription`,
+  VERIFY_SESSION: `${API_BASE_URL}/api/stripe/verify-session`,
+  GEOCODE: `${API_BASE_URL}/api/geocode`,
 };
 
 // Subscription plans

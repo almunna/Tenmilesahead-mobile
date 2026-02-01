@@ -269,7 +269,76 @@ export default function EditTripModal({ tripId, visible, onClose }) {
       const destCity = form.originCity || "Unknown";
       const destCountry = form.originCountry || "Unknown";
 
-      // Update trip data
+      // Delete removed media from storage first (before updating trip)
+      for (const media of mediaToDelete) {
+        try {
+          if (media.storagePath) {
+            const sref = storageRef(storage, media.storagePath);
+            await deleteObject(sref);
+          }
+          await deleteDoc(doc(db, "trips", tripId, "media", media.id));
+        } catch (error) {
+          console.error("Error deleting media:", error);
+        }
+      }
+
+      // Upload new media first to get IDs
+      let firstNewImageId = null;
+      const newMediaList = [...newPhotos, ...newVideos];
+
+      for (let i = 0; i < newMediaList.length; i++) {
+        const asset = newMediaList[i];
+        const isImage = newPhotos.includes(asset);
+        const isVideo = newVideos.includes(asset);
+        const kind = isImage ? "image" : isVideo ? "video" : "other";
+        if (kind === "other") continue;
+
+        try {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+
+          const mediaRef = doc(collection(db, "trips", tripId, "media"));
+          const mediaId = mediaRef.id;
+
+          const safeName = (asset.fileName || `media_${Date.now()}.jpg`).replace(
+            /[^\w.\-]+/g,
+            "_"
+          );
+          const storagePath = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
+          const sref = storageRef(storage, storagePath);
+
+          await uploadBytes(sref, blob);
+          const downloadURL = await getDownloadURL(sref);
+
+          await setDoc(mediaRef, {
+            tripId,
+            type: kind,
+            storagePath,
+            downloadURL,
+            createdAt: now,
+            takenAt: now,
+            caption: captions[existingMedia.length + i] || "",
+            fileName: asset.fileName || safeName,
+            size: asset.fileSize || 0,
+            contentType: asset.type || "image/jpeg",
+          });
+
+          if (isImage && !firstNewImageId) {
+            firstNewImageId = mediaId;
+          }
+        } catch (mediaError) {
+          console.error("Error uploading media:", mediaError);
+          // Continue with other media uploads
+        }
+      }
+
+      // Determine final cover media ID
+      let finalCoverMediaId = coverMediaId;
+      if (!finalCoverMediaId && firstNewImageId) {
+        finalCoverMediaId = firstNewImageId;
+      }
+
+      // Update trip data (single update with all fields including coverMediaId)
       const tripData = {
         name: form.name,
         city: destCity,
@@ -288,137 +357,72 @@ export default function EditTripModal({ tripId, visible, onClose }) {
         updatedAt: now,
       };
 
+      // Only include coverMediaId if we have one
+      if (finalCoverMediaId) {
+        tripData.coverMediaId = finalCoverMediaId;
+      }
+
       await updateDoc(doc(db, "trips", tripId), tripData);
 
-      // Delete removed media from storage
-      for (const media of mediaToDelete) {
-        try {
-          if (media.storagePath) {
-            const sref = storageRef(storage, media.storagePath);
-            await deleteObject(sref);
-          }
-          await deleteDoc(doc(db, "trips", tripId, "media", media.id));
-        } catch (error) {
-          console.error("Error deleting media:", error);
-        }
-      }
+      // Handle cruise review (separate try-catch so it doesn't affect trip save)
+      try {
+        if (isCruise && cruiseLineValue && cruiseShipValue) {
+          const hasReviewContent =
+            cruiseReview.review ||
+            cruiseReview.qualityRating ||
+            cruiseReview.valueRating ||
+            cruiseReview.serviceRating ||
+            cruiseReview.foodRating ||
+            cruiseReview.entertainmentRating;
 
-      // Upload new media
-      let firstNewImageId = null;
-      const newMediaList = [...newPhotos, ...newVideos];
+          if (hasReviewContent) {
+            const cruiseData = {
+              name: `${cruiseLineValue} - ${cruiseShipValue}`,
+              cruiseLine: cruiseLineValue,
+              shipName: cruiseShipValue,
+              startDate: form.startDate || null,
+              endDate: form.endDate || null,
+              city: form.originCity || "Unknown",
+              state: form.originState || null,
+              country: form.originCountry || "Unknown",
+              review: cruiseReview.review || null,
+              qualityRating: cruiseReview.qualityRating,
+              valueRating: cruiseReview.valueRating,
+              serviceRating: cruiseReview.serviceRating,
+              foodRating: cruiseReview.foodRating,
+              entertainmentRating: cruiseReview.entertainmentRating,
+              updatedAt: now,
+            };
 
-      for (let i = 0; i < newMediaList.length; i++) {
-        const asset = newMediaList[i];
-        const isImage = newPhotos.includes(asset);
-        const isVideo = newVideos.includes(asset);
-        const kind = isImage ? "image" : isVideo ? "video" : "other";
-        if (kind === "other") continue;
-
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
-        const mediaRef = doc(collection(db, "trips", tripId, "media"));
-        const mediaId = mediaRef.id;
-
-        const safeName = (asset.fileName || `media_${Date.now()}.jpg`).replace(
-          /[^\w.\-]+/g,
-          "_"
-        );
-        const storagePath = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
-        const sref = storageRef(storage, storagePath);
-
-        await uploadBytes(sref, blob);
-        const downloadURL = await getDownloadURL(sref);
-
-        await setDoc(mediaRef, {
-          tripId,
-          type: kind,
-          storagePath,
-          downloadURL,
-          createdAt: now,
-          takenAt: now,
-          caption: captions[existingMedia.length + i] || "",
-          fileName: asset.fileName || safeName,
-          size: asset.fileSize || 0,
-          contentType: asset.type || "image/jpeg",
-        });
-
-        if (isImage && !firstNewImageId) {
-          firstNewImageId = mediaId;
-        }
-      }
-
-      // Update cover media ID if needed
-      if (!coverMediaId && firstNewImageId) {
-        await updateDoc(doc(db, "trips", tripId), {
-          coverMediaId: firstNewImageId,
-          updatedAt: now,
-        });
-      } else if (coverMediaId) {
-        await updateDoc(doc(db, "trips", tripId), {
-          coverMediaId,
-          updatedAt: now,
-        });
-      }
-
-      // Handle cruise review
-      if (isCruise && cruiseLineValue && cruiseShipValue) {
-        const hasReviewContent =
-          cruiseReview.review ||
-          cruiseReview.qualityRating ||
-          cruiseReview.valueRating ||
-          cruiseReview.serviceRating ||
-          cruiseReview.foodRating ||
-          cruiseReview.entertainmentRating;
-
-        if (hasReviewContent) {
-          const cruiseData = {
-            name: `${cruiseLineValue} - ${cruiseShipValue}`,
-            cruiseLine: cruiseLineValue,
-            shipName: cruiseShipValue,
-            startDate: form.startDate || null,
-            endDate: form.endDate || null,
-            city: form.originCity || "Unknown",
-            state: form.originState || null,
-            country: form.originCountry || "Unknown",
-            review: cruiseReview.review || null,
-            qualityRating: cruiseReview.qualityRating,
-            valueRating: cruiseReview.valueRating,
-            serviceRating: cruiseReview.serviceRating,
-            foodRating: cruiseReview.foodRating,
-            entertainmentRating: cruiseReview.entertainmentRating,
-            updatedAt: now,
-          };
-
-          if (cruiseReview.id) {
-            // Update existing review
-            await updateDoc(
-              doc(db, "trips", tripId, "cruises", cruiseReview.id),
-              cruiseData
+            if (cruiseReview.id) {
+              await updateDoc(
+                doc(db, "trips", tripId, "cruises", cruiseReview.id),
+                cruiseData
+              );
+            } else {
+              await addDoc(collection(db, "trips", tripId, "cruises"), {
+                ...cruiseData,
+                createdAt: now,
+              });
+            }
+          } else if (cruiseReview.id) {
+            await deleteDoc(
+              doc(db, "trips", tripId, "cruises", cruiseReview.id)
             );
-          } else {
-            // Create new review
-            await addDoc(collection(db, "trips", tripId, "cruises"), {
-              ...cruiseData,
-              createdAt: now,
-            });
           }
         } else if (cruiseReview.id) {
-          // Delete review if no content
-          await deleteDoc(
-            doc(db, "trips", tripId, "cruises", cruiseReview.id)
-          );
+          await deleteDoc(doc(db, "trips", tripId, "cruises", cruiseReview.id));
         }
-      } else if (cruiseReview.id) {
-        // Delete cruise review if no longer a cruise
-        await deleteDoc(doc(db, "trips", tripId, "cruises", cruiseReview.id));
+      } catch (cruiseError) {
+        console.error("Error saving cruise review:", cruiseError);
+        // Don't fail the whole save for cruise review errors
       }
 
       Alert.alert("Success", "Trip updated successfully");
       onClose();
     } catch (error) {
       console.error("Error updating trip:", error);
-      Alert.alert("Error", "Failed to update trip");
+      Alert.alert("Error", "Failed to update trip. Please try again.");
     } finally {
       setSaving(false);
     }

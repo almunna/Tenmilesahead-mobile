@@ -31,6 +31,16 @@ import { dateRangeOf } from "../lib/utils";
 
 const { width, height } = Dimensions.get("window");
 
+// Helper to convert timestamps to milliseconds (handles both number and Firestore Timestamp)
+function getMillis(t) {
+  if (!t) return 0;
+  if (typeof t === "number") return t;
+  if (typeof t === "object" && typeof t.seconds === "number") {
+    return t.seconds * 1000 + (t.nanoseconds ? t.nanoseconds / 1e6 : 0);
+  }
+  return 0;
+}
+
 export default function TripDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -189,12 +199,17 @@ export default function TripDetailScreen() {
     ? media.find((m) => m.id === trip.coverMediaId)
     : null;
 
-  const sortedMedia = [...media].sort((a, b) => {
-    const aTime = a.takenAt?.seconds || a.createdAt?.seconds || 0;
-    const bTime = b.takenAt?.seconds || b.createdAt?.seconds || 0;
-    if (aTime !== bTime) return aTime - bTime;
-    return (a.id || "").localeCompare(b.id || "");
-  });
+  // Sort chronologically by takenAt (if available) or createdAt - oldest first
+  // Use document ID as tiebreaker for stable sort when timestamps are equal
+  const sortedMedia = [...media]
+    .filter((m) => m.type === "image" || m.type === "video")
+    .sort((a, b) => {
+      const aWhen = getMillis(a.takenAt ?? a.createdAt);
+      const bWhen = getMillis(b.takenAt ?? b.createdAt);
+      if (aWhen !== bWhen) return aWhen - bWhen;
+      // Stable sort: use ID as tiebreaker
+      return (a.id || "").localeCompare(b.id || "");
+    });
 
   async function setCover(mediaId) {
     if (!trip) return;

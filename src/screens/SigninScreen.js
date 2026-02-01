@@ -18,6 +18,7 @@ import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/co
 export default function SigninScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -107,14 +108,22 @@ export default function SigninScreen({ navigation }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              placeholderTextColor={COLORS.muted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor={COLORS.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <Text style={styles.eyeIcon}>{showPassword ? "👁" : "👁‍🗨"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -238,6 +247,25 @@ const styles = StyleSheet.create({
     padding: scaleSpacing(SPACING.md),
     color: COLORS.foreground,
     fontSize: scaleFontSize(16),
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: scaleFontSize(8),
+  },
+  passwordInput: {
+    flex: 1,
+    padding: scaleSpacing(SPACING.md),
+    color: COLORS.foreground,
+    fontSize: scaleFontSize(16),
+  },
+  eyeButton: {
+    padding: scaleSpacing(SPACING.md),
+  },
+  eyeIcon: {
+    fontSize: scaleFontSize(18),
+    color: COLORS.muted,
   },
   forgotButton: {
     alignSelf: "flex-end",

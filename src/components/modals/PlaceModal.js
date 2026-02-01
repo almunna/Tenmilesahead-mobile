@@ -42,8 +42,9 @@ import ConfirmModal from "./ConfirmModal";
 import Dropdown from "../Dropdown";
 import DatePicker from "../DatePicker";
 import { COLORS, SPACING } from "../../lib/constants";
-import { COUNTRIES, getStates } from "../../lib/geo";
+import { COUNTRIES, getStates, matchCountryName, matchStateName } from "../../lib/geo";
 import { sortAZWithOtherLast } from "../../lib/utils";
+import PlaceAutocomplete from "../PlaceAutocomplete";
 
 export default function PlaceModal({
   tripId,
@@ -66,6 +67,8 @@ export default function PlaceModal({
     city: "",
     state: "",
     country: "",
+    phoneNumber: "",
+    websiteUrl: "",
     notes: "",
     startDate: "",
     endDate: "",
@@ -215,6 +218,8 @@ export default function PlaceModal({
       city: "",
       state: "",
       country: "",
+      phoneNumber: "",
+      websiteUrl: "",
       notes: "",
       startDate: "",
       endDate: "",
@@ -236,6 +241,8 @@ export default function PlaceModal({
       city: item.city || "",
       state: item.state || "",
       country: item.country || "",
+      phoneNumber: item.phoneNumber || "",
+      websiteUrl: item.websiteUrl || "",
       notes: item.notes || "",
       startDate: item.startDate || "",
       endDate: item.endDate || "",
@@ -691,6 +698,14 @@ export default function PlaceModal({
         )}
 
         {item.address && <Text style={styles.itemAddress}>{item.address}</Text>}
+        {item.phoneNumber && (
+          <Text style={styles.itemPhone}>{item.phoneNumber}</Text>
+        )}
+        {item.websiteUrl && (
+          <TouchableOpacity onPress={() => Linking.openURL(item.websiteUrl)}>
+            <Text style={styles.itemWebsite}>{item.websiteUrl}</Text>
+          </TouchableOpacity>
+        )}
         {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
         {item.review && <Text style={styles.itemReview}>"{item.review}"</Text>}
 
@@ -816,12 +831,28 @@ export default function PlaceModal({
               </Text>
 
               <Text style={styles.label}>Name *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={`${title.slice(0, -1)} name`}
-                placeholderTextColor={COLORS.muted}
+              <PlaceAutocomplete
                 value={form.name}
-                onChangeText={(text) => setForm({ ...form, name: text })}
+                onChange={(value) => setForm({ ...form, name: value })}
+                onPlaceSelect={(details) => {
+                  // Match country name to our COUNTRIES array
+                  const matchedCountry = matchCountryName(details.country);
+                  // Match state name to our STATES_BY_COUNTRY
+                  const matchedState = matchStateName(matchedCountry, details.state);
+
+                  setForm((prev) => ({
+                    ...prev,
+                    name: details.name || prev.name,
+                    country: matchedCountry || prev.country,
+                    state: matchedState || prev.state,
+                    city: details.city || prev.city,
+                    address: details.address || prev.address,
+                    phoneNumber: details.phoneNumber || prev.phoneNumber,
+                    websiteUrl: details.websiteUrl || prev.websiteUrl,
+                  }));
+                }}
+                placeholder={`Search for ${title.slice(0, -1).toLowerCase()}...`}
+                style={styles.input}
               />
 
               <Dropdown
@@ -861,6 +892,27 @@ export default function PlaceModal({
                 placeholderTextColor={COLORS.muted}
                 value={form.address}
                 onChangeText={(text) => setForm({ ...form, address: text })}
+              />
+
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Phone number"
+                placeholderTextColor={COLORS.muted}
+                value={form.phoneNumber}
+                onChangeText={(text) => setForm({ ...form, phoneNumber: text })}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.label}>Website</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Website URL"
+                placeholderTextColor={COLORS.muted}
+                value={form.websiteUrl}
+                onChangeText={(text) => setForm({ ...form, websiteUrl: text })}
+                keyboardType="url"
+                autoCapitalize="none"
               />
 
               <View style={styles.row}>
@@ -1227,6 +1279,17 @@ const styles = StyleSheet.create({
   itemAddress: {
     fontSize: 14,
     color: COLORS.muted,
+  },
+  itemPhone: {
+    fontSize: 14,
+    color: COLORS.muted,
+    marginTop: SPACING.xs,
+  },
+  itemWebsite: {
+    fontSize: 14,
+    color: COLORS.primary,
+    marginTop: SPACING.xs,
+    textDecorationLine: "underline",
   },
   itemReview: {
     fontSize: 14,

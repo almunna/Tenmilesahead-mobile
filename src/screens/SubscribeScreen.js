@@ -9,10 +9,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { doc, updateDoc } from "firebase/firestore";
+import { useStripe } from "@stripe/stripe-react-native";
 import { db } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
 import Protected from "../components/Protected";
-import { COLORS, SPACING, SCREENS } from "../lib/constants";
+import { COLORS, SPACING, SCREENS, API_ENDPOINTS } from "../lib/constants";
 
 const plans = [
   {
@@ -102,10 +103,12 @@ export default function SubscribeScreen({ navigation }) {
 function SubscribeInner({ navigation }) {
   const { user, profile, refreshProfile } = useAuth();
 
+  // Check subscription (must have valid status AND not expired)
   const subscription = profile?.subscription;
   const isActive =
     (subscription?.status === "active" || subscription?.status === "trialing") &&
-    !subscription?.cancelAtPeriodEnd;
+    !subscription?.cancelAtPeriodEnd &&
+    subscription?.currentPeriodEnd > Date.now();
 
   if (isActive) {
     return <SubscriptionManagement navigation={navigation} />;
@@ -278,8 +281,93 @@ function SubscriptionManagement({ navigation }) {
 }
 
 function PricingPlans({ navigation }) {
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(null);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  // Check if user has already used their free trial
+  const hasUsedTrial = profile?.hasUsedTrial === true;
+
+  // Filter out trial plan if already used
+  const availablePlans = hasUsedTrial
+    ? plans.filter((plan) => plan.id !== "trial")
+    : plans;
+
+  // Handle paid subscription with Stripe
+  const handlePaidSubscription = async (planId) => {
+    setLoading(planId);
+    try {
+      // 1. Create subscription on backend and get client secret
+      const response = await fetch(API_ENDPOINTS.CREATE_SUBSCRIPTION, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: planId,
+          userId: user.uid,
+          userEmail: user.email,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create subscription");
+      }
+
+      const { clientSecret, subscriptionId, customerId } = data;
+
+      // 2. Initialize the Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: "Ten Miles Ahead",
+        style: "automatic",
+      });
+
+      if (initError) {
+        throw new Error(initError.message);
+      }
+
+      // 3. Present the Payment Sheet
+      const { error: paymentError } = await presentPaymentSheet();
+
+      if (paymentError) {
+        if (paymentError.code === "Canceled") {
+          // User canceled - not an error
+          return;
+        }
+        throw new Error(paymentError.message);
+      }
+
+      // 4. Payment successful - update local profile
+      const userRef = doc(db, "users", user.uid);
+      const periodEnd = planId === "annual"
+        ? Date.now() + 365 * 24 * 60 * 60 * 1000  // 1 year
+        : Date.now() + 30 * 24 * 60 * 60 * 1000;  // 30 days
+
+      await updateDoc(userRef, {
+        subscription: {
+          status: "active",
+          plan: planId,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+        },
+        updatedAt: Date.now(),
+      });
+
+      await refreshProfile();
+      Alert.alert(
+        "Success!",
+        `Your ${planId === "annual" ? "annual" : "monthly"} subscription is now active!`
+      );
+    } catch (error) {
+      console.error("Subscription error:", error);
+      Alert.alert("Error", error.message || "Failed to process payment. Please try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const handleSubscribe = async (planId) => {
     if (!user) {
@@ -288,6 +376,15 @@ function PricingPlans({ navigation }) {
     }
 
     if (planId === "trial") {
+      // Double-check: prevent trial if already used
+      if (hasUsedTrial) {
+        Alert.alert(
+          "Trial Already Used",
+          "You have already used your free trial. Please choose a paid plan to continue."
+        );
+        return;
+      }
+
       setLoading(planId);
       try {
         const userRef = doc(db, "users", user.uid);
@@ -300,6 +397,7 @@ function PricingPlans({ navigation }) {
             currentPeriodEnd: trialEndDate,
             cancelAtPeriodEnd: false,
           },
+          hasUsedTrial: true, // Mark that user has used their free trial
           updatedAt: Date.now(),
         });
 
@@ -313,11 +411,8 @@ function PricingPlans({ navigation }) {
       return;
     }
 
-    // For paid plans, show in-app purchase or Stripe payment sheet
-    Alert.alert(
-      "Coming Soon",
-      "In-app purchases will be available soon. For now, you can start with the free trial!"
-    );
+    // For paid plans (monthly/annual), use Stripe Payment Sheet
+    await handlePaidSubscription(planId);
   };
 
   return (
@@ -330,8 +425,8 @@ function PricingPlans({ navigation }) {
         </Text>
       </View>
 
-      {/* Pricing Cards */}
-      {plans.map((plan) => (
+      {/* Pricing Cards - trial plan hidden if already used */}
+      {availablePlans.map((plan) => (
         <View
           key={plan.id}
           style={[

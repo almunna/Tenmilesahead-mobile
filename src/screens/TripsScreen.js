@@ -70,12 +70,13 @@ function TripsInner({ navigation }) {
   const [menuTrip, setMenuTrip] = useState(null);
   const [showAddTrip, setShowAddTrip] = useState(false);
 
-  // Check subscription
+  // Check subscription (must have valid status AND not expired)
   const subscription = profile?.subscription;
   const isSubscribed =
     (subscription?.status === "active" ||
       subscription?.status === "trialing") &&
-    !subscription?.cancelAtPeriodEnd;
+    !subscription?.cancelAtPeriodEnd &&
+    subscription?.currentPeriodEnd > Date.now();
 
   useEffect(() => {
     if (!user) return;

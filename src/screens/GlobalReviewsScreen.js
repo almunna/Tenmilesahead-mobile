@@ -75,11 +75,13 @@ export default function GlobalReviewsScreen({ navigation }) {
 function GlobalReviewsInner({ navigation }) {
   const { user, profile } = useAuth();
 
+  // Check subscription (must have valid status AND not expired)
   const subscription = profile?.subscription;
   const isSubscribed =
     (subscription?.status === "active" ||
       subscription?.status === "trialing") &&
-    !subscription?.cancelAtPeriodEnd;
+    !subscription?.cancelAtPeriodEnd &&
+    subscription?.currentPeriodEnd > Date.now();
 
   if (!isSubscribed) {
     return (
