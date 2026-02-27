@@ -8,8 +8,10 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
+import { deleteUser } from "firebase/auth";
 import { db } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
 import Protected from "../components/Protected";
@@ -28,6 +30,7 @@ function ProfileInner({ navigation }) {
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState(profile?.username || "");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleSave() {
     if (!username.trim()) {
@@ -54,6 +57,53 @@ function ProfileInner({ navigation }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to permanently delete your account? This will remove all your data including trips, photos, and subscription. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              // Delete user's trips
+              const tripsQuery = query(
+                collection(db, "trips"),
+                where("userId", "==", user.uid)
+              );
+              const tripsSnapshot = await getDocs(tripsQuery);
+              const batch = writeBatch(db);
+              tripsSnapshot.forEach((doc) => batch.delete(doc.ref));
+              await batch.commit();
+
+              // Delete user profile document
+              await deleteDoc(doc(db, "users", user.uid));
+
+              // Delete Firebase Auth account
+              await deleteUser(user);
+
+              Alert.alert("Account Deleted", "Your account and all data have been permanently deleted.");
+            } catch (error) {
+              if (error.code === "auth/requires-recent-login") {
+                Alert.alert(
+                  "Re-authentication Required",
+                  "For security, please sign out and sign back in, then try deleting your account again."
+                );
+              } else {
+                Alert.alert("Error", "Failed to delete account. Please try again.");
+              }
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   // Check subscription (must have valid status AND not expired)
@@ -213,6 +263,19 @@ function ProfileInner({ navigation }) {
         <Text style={styles.signOutButtonText}>Sign Out</Text>
       </TouchableOpacity>
 
+      {/* Delete Account */}
+      <TouchableOpacity
+        style={[styles.deleteAccountButton, deleting && styles.buttonDisabled]}
+        onPress={handleDeleteAccount}
+        disabled={deleting}
+      >
+        {deleting ? (
+          <ActivityIndicator color={COLORS.error} />
+        ) : (
+          <Text style={styles.deleteAccountText}>Delete My Account</Text>
+        )}
+      </TouchableOpacity>
+
       <Text style={styles.versionText}>Ten Miles Ahead v1.0.0</Text>
     </ScrollView>
   );
@@ -221,6 +284,7 @@ function ProfileInner({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   content: {
@@ -421,6 +485,19 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: scaleFontSize(16),
     fontWeight: "600",
+  },
+  deleteAccountButton: {
+    paddingVertical: scaleSpacing(SPACING.md),
+    borderRadius: scaleFontSize(8),
+    alignItems: "center",
+    marginTop: scaleSpacing(SPACING.sm),
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  deleteAccountText: {
+    color: COLORS.error,
+    fontSize: scaleFontSize(14),
+    fontWeight: "500",
   },
   versionText: {
     textAlign: "center",

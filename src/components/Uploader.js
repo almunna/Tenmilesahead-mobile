@@ -113,7 +113,6 @@ export default function Uploader({ tripId, onUploadComplete }) {
 
       if (onUploadComplete) onUploadComplete();
     } catch (error) {
-      console.error("Upload error:", error);
       Alert.alert("Upload failed", "There was an error uploading your media.");
     } finally {
       setUploading(false);

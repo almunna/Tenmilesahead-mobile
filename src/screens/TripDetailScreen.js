@@ -822,6 +822,7 @@ function FlipbookModal({ media, initialIndex, onClose }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   scrollView: {
@@ -1132,6 +1133,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: SPACING.md,
+    paddingTop: 60,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
   },

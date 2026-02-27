@@ -120,7 +120,6 @@ async function geocodeLocation(location) {
 
     return await requestPromise;
   } catch (error) {
-    console.error("Error geocoding location:", error);
     pendingRequests.delete(location);
     return null;
   }
@@ -180,7 +179,6 @@ export async function calculateDistance(
 
     return Math.round(R * c);
   } catch (error) {
-    console.error("Error calculating distance:", error);
     return 0;
   }
 }
@@ -330,7 +328,6 @@ export async function getCoordinates(address, city, state, country) {
     geocodeCache.set(cacheKey, null);
     return null;
   } catch (error) {
-    console.error("Error getting coordinates:", error);
     return null;
   }
 }

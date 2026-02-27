@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  PanResponder,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
@@ -15,12 +16,36 @@ import { dateRangeOf } from "../lib/utils";
 
 const { width } = Dimensions.get("window");
 const cardWidth = width - SPACING.md * 2;
+const containerHeight = cardWidth / (16 / 9);
 
 export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
   const navigation = useNavigation();
   const [cover, setCover] = useState(null);
   const [allMedia, setAllMedia] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
+  const [adjustMode, setAdjustMode] = useState(false);
+  const [localFocus, setLocalFocus] = useState({ x: 50, y: 50 });
+
+  // Refs for PanResponder callbacks (created once, need current values via refs)
+  const adjustModeRef = useRef(false);
+  const localFocusRef = useRef({ x: 50, y: 50 });
+  const startFocusRef = useRef({ x: 50, y: 50 });
+  const imgSizeRef = useRef({ width: 0, height: 0 });
+  const tripIdRef = useRef(trip.id);
+
+  // Keep refs in sync with state
+  useEffect(() => { adjustModeRef.current = adjustMode; }, [adjustMode]);
+  useEffect(() => { localFocusRef.current = localFocus; }, [localFocus]);
+  useEffect(() => { imgSizeRef.current = imgSize; }, [imgSize]);
+  useEffect(() => { tripIdRef.current = trip.id; }, [trip.id]);
+
+  // Initialize localFocus from trip data
+  useEffect(() => {
+    const cf = trip.coverFocus || { x: 50, y: 50 };
+    setLocalFocus(cf);
+    localFocusRef.current = cf;
+  }, [trip.coverFocus?.x, trip.coverFocus?.y]);
 
   // Fetch all media for this trip
   useEffect(() => {
@@ -61,30 +86,126 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
     if (idx !== -1) setCurrentIndex(idx);
   }, [trip.coverMediaId, allMedia]);
 
+  // Get image dimensions for cover focus positioning
+  useEffect(() => {
+    if (cover?.type === "image") {
+      if (cover.width && cover.height) {
+        const size = { width: cover.width, height: cover.height };
+        setImgSize(size);
+        imgSizeRef.current = size;
+      } else if (cover.downloadURL) {
+        Image.getSize(
+          cover.downloadURL,
+          (w, h) => {
+            const size = { width: w, height: h };
+            setImgSize(size);
+            imgSizeRef.current = size;
+          },
+          () => {}
+        );
+      }
+    } else {
+      setImgSize({ width: 0, height: 0 });
+      imgSizeRef.current = { width: 0, height: 0 };
+    }
+  }, [cover?.downloadURL, cover?.width, cover?.height]);
+
+  // PanResponder for drag-to-reposition
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => adjustModeRef.current,
+      onMoveShouldSetPanResponder: () => adjustModeRef.current,
+      onPanResponderGrant: () => {
+        startFocusRef.current = { ...localFocusRef.current };
+      },
+      onPanResponderMove: (_, gs) => {
+        const { width: iw, height: ih } = imgSizeRef.current;
+        if (iw === 0 || ih === 0) return;
+
+        const scaleX = cardWidth / iw;
+        const scaleY = containerHeight / ih;
+        const scale = Math.max(scaleX, scaleY);
+
+        const maxOX = iw * scale - cardWidth;
+        const maxOY = ih * scale - containerHeight;
+
+        const dx = maxOX > 0 ? (gs.dx / maxOX) * 100 : 0;
+        const dy = maxOY > 0 ? (gs.dy / maxOY) * 100 : 0;
+
+        const newFocus = {
+          x: Math.max(0, Math.min(100, startFocusRef.current.x - dx)),
+          y: Math.max(0, Math.min(100, startFocusRef.current.y - dy)),
+        };
+        localFocusRef.current = newFocus;
+        setLocalFocus(newFocus);
+      },
+      onPanResponderRelease: async () => {
+        const focus = localFocusRef.current;
+        try {
+          await updateDoc(doc(db, "trips", tripIdRef.current), {
+            coverFocus: { x: Math.round(focus.x), y: Math.round(focus.y) },
+            updatedAt: Date.now(),
+          });
+        } catch (e) {
+        }
+      },
+    })
+  ).current;
+
   function goToPrevious() {
-    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+      setAdjustMode(false);
+    }
   }
 
   function goToNext() {
-    if (currentIndex < allMedia.length - 1) setCurrentIndex(currentIndex + 1);
+    if (currentIndex < allMedia.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setAdjustMode(false);
+    }
   }
 
-  const coverFocus = trip.coverFocus || { x: 50, y: 50 };
+  // Calculate image positioning based on coverFocus
+  const hasImgSize = imgSize.width > 0 && imgSize.height > 0;
+  let computedImageStyle = null;
+  if (hasImgSize) {
+    const scaleX = cardWidth / imgSize.width;
+    const scaleY = containerHeight / imgSize.height;
+    const scale = Math.max(scaleX, scaleY);
+    const scaledW = imgSize.width * scale;
+    const scaledH = imgSize.height * scale;
+    const maxOX = scaledW - cardWidth;
+    const maxOY = scaledH - containerHeight;
+
+    computedImageStyle = {
+      position: "absolute",
+      width: scaledW,
+      height: scaledH,
+      left: -(localFocus.x / 100) * maxOX,
+      top: -(localFocus.y / 100) * maxOY,
+    };
+  }
 
   return (
     <View style={styles.card}>
-      {/* Cover Image */}
-      <TouchableOpacity
-        style={styles.coverContainer}
-        onPress={() => navigation.navigate(SCREENS.TRIP_DETAIL, { tripId: trip.id })}
-        activeOpacity={0.9}
-      >
+      {/* Cover area */}
+      <View style={styles.coverContainer}>
+        {/* Image / Video / Placeholder */}
         {cover?.type === "image" ? (
-          <Image
-            source={{ uri: cover.downloadURL }}
-            style={styles.coverImage}
-            resizeMode="cover"
-          />
+          computedImageStyle ? (
+            <Image
+              source={{ uri: cover.downloadURL }}
+              style={computedImageStyle}
+              resizeMode="stretch"
+            />
+          ) : (
+            <Image
+              source={{ uri: cover.downloadURL }}
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
+          )
         ) : cover?.type === "video" ? (
           <View style={styles.videoCover}>
             <Text style={styles.videoIcon}>▶</Text>
@@ -96,10 +217,10 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
         )}
 
         {/* Gradient overlay */}
-        <View style={styles.gradient} />
+        <View style={styles.gradient} pointerEvents="none" />
 
         {/* Trip info overlay */}
-        <View style={styles.infoOverlay}>
+        <View style={styles.infoOverlay} pointerEvents="none">
           <Text style={styles.tripName} numberOfLines={1}>
             {trip.name}
           </Text>
@@ -108,35 +229,71 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
 
         {/* Photo counter */}
         {allMedia.length > 1 && (
-          <View style={styles.photoCounter}>
+          <View style={styles.photoCounter} pointerEvents="none">
             <Text style={styles.photoCounterText}>
               {currentIndex + 1} / {allMedia.length}
             </Text>
           </View>
         )}
 
-        {/* Navigation arrows */}
-        {allMedia.length > 1 && (
+        {/* Mode-specific interactive layers */}
+        {adjustMode ? (
           <>
-            {currentIndex > 0 && (
-              <TouchableOpacity
-                style={[styles.navArrow, styles.navArrowLeft]}
-                onPress={goToPrevious}
-              >
-                <Text style={styles.navArrowText}>‹</Text>
-              </TouchableOpacity>
-            )}
-            {currentIndex < allMedia.length - 1 && (
-              <TouchableOpacity
-                style={[styles.navArrow, styles.navArrowRight]}
-                onPress={goToNext}
-              >
-                <Text style={styles.navArrowText}>›</Text>
-              </TouchableOpacity>
+            {/* Drag surface for repositioning */}
+            <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
+
+            {/* Drag hint */}
+            <View style={styles.adjustHintWrap} pointerEvents="none">
+              <View style={styles.adjustHint}>
+                <Text style={styles.adjustHintText}>Drag to reposition</Text>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Tap to navigate to trip detail */}
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={() => navigation.navigate(SCREENS.TRIP_DETAIL, { tripId: trip.id })}
+              activeOpacity={0.9}
+            />
+
+            {/* Navigation arrows */}
+            {allMedia.length > 1 && (
+              <>
+                {currentIndex > 0 && (
+                  <TouchableOpacity
+                    style={[styles.navArrow, styles.navArrowLeft]}
+                    onPress={goToPrevious}
+                  >
+                    <Text style={styles.navArrowText}>‹</Text>
+                  </TouchableOpacity>
+                )}
+                {currentIndex < allMedia.length - 1 && (
+                  <TouchableOpacity
+                    style={[styles.navArrow, styles.navArrowRight]}
+                    onPress={goToNext}
+                  >
+                    <Text style={styles.navArrowText}>›</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </>
         )}
-      </TouchableOpacity>
+
+        {/* Adjust / Done button (images only, always on top) */}
+        {cover?.type === "image" && (
+          <TouchableOpacity
+            style={[styles.adjustButton, adjustMode && styles.adjustButtonActive]}
+            onPress={() => setAdjustMode(!adjustMode)}
+          >
+            <Text style={styles.adjustButtonText}>
+              {adjustMode ? "Done" : "Move"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Action buttons */}
       <View style={styles.actions}>
@@ -191,6 +348,7 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 16 / 9,
     position: "relative",
+    overflow: "hidden",
   },
   coverImage: {
     width: "100%",
@@ -225,7 +383,6 @@ const styles = StyleSheet.create({
     right: 0,
     height: "60%",
     backgroundColor: "transparent",
-    // React Native doesn't support CSS gradients, use LinearGradient component instead
   },
   infoOverlay: {
     position: "absolute",
@@ -280,6 +437,40 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(20),
     color: COLORS.white,
     fontWeight: "bold",
+  },
+  adjustButton: {
+    position: "absolute",
+    top: scaleSpacing(SPACING.xs),
+    right: scaleSpacing(SPACING.xs),
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingVertical: scaleSpacing(4),
+    paddingHorizontal: scaleSpacing(10),
+    borderRadius: scaleSpacing(12),
+  },
+  adjustButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  adjustButtonText: {
+    color: COLORS.white,
+    fontSize: scaleFontSize(11),
+    fontWeight: "600",
+  },
+  adjustHintWrap: {
+    position: "absolute",
+    bottom: scaleSpacing(40),
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  adjustHint: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingVertical: scaleSpacing(4),
+    paddingHorizontal: scaleSpacing(12),
+    borderRadius: scaleSpacing(8),
+  },
+  adjustHintText: {
+    color: COLORS.white,
+    fontSize: scaleFontSize(11),
   },
   actions: {
     flexDirection: "row",

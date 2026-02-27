@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,20 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
+  Linking,
 } from "react-native";
 import { doc, updateDoc } from "firebase/firestore";
-import { useStripe } from "@stripe/stripe-react-native";
+import Purchases from "react-native-purchases";
 import { db } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
 import Protected from "../components/Protected";
 import { COLORS, SPACING, SCREENS, API_ENDPOINTS } from "../lib/constants";
+
+// Only import Stripe on Android
+const useStripeHook = Platform.OS === "android"
+  ? require("@stripe/stripe-react-native").useStripe
+  : () => ({});
 
 const plans = [
   {
@@ -149,6 +156,14 @@ function SubscriptionManagement({ navigation }) {
   });
 
   const handleCancelSubscription = async () => {
+    // On iOS, redirect to Apple's subscription management
+    if (Platform.OS === "ios" && subscription?.plan !== "trial") {
+      Linking.openURL("https://apps.apple.com/account/subscriptions");
+      setShowCancelConfirm(false);
+      return;
+    }
+
+    // For Android (Stripe) and trial plans, handle locally
     setCanceling(true);
     try {
       if (profile?.uid) {
@@ -221,7 +236,11 @@ function SubscriptionManagement({ navigation }) {
             style={styles.cancelButton}
             onPress={() => setShowCancelConfirm(true)}
           >
-            <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
+            <Text style={styles.cancelButtonText}>
+              {Platform.OS === "ios" && subscription?.plan !== "trial"
+                ? "Manage Subscription"
+                : "Cancel Subscription"}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -249,9 +268,15 @@ function SubscriptionManagement({ navigation }) {
       {showCancelConfirm && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Cancel Subscription?</Text>
+            <Text style={styles.modalTitle}>
+              {Platform.OS === "ios" && subscription?.plan !== "trial"
+                ? "Manage Subscription"
+                : "Cancel Subscription?"}
+            </Text>
             <Text style={styles.modalText}>
-              Are you sure you want to cancel your subscription? You'll continue to have access until {validUntil}, but your subscription won't renew.
+              {Platform.OS === "ios" && subscription?.plan !== "trial"
+                ? "You'll be redirected to Apple's subscription management where you can cancel or modify your subscription."
+                : `Are you sure you want to cancel your subscription? You'll continue to have access until ${validUntil}, but your subscription won't renew.`}
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -259,7 +284,7 @@ function SubscriptionManagement({ navigation }) {
                 onPress={() => setShowCancelConfirm(false)}
                 disabled={canceling}
               >
-                <Text style={styles.modalKeepButtonText}>Keep Subscription</Text>
+                <Text style={styles.modalKeepButtonText}>Go Back</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalCancelButton, canceling && styles.buttonDisabled]}
@@ -269,7 +294,11 @@ function SubscriptionManagement({ navigation }) {
                 {canceling ? (
                   <ActivityIndicator color={COLORS.white} />
                 ) : (
-                  <Text style={styles.modalCancelButtonText}>Yes, Cancel</Text>
+                  <Text style={styles.modalCancelButtonText}>
+                    {Platform.OS === "ios" && subscription?.plan !== "trial"
+                      ? "Continue"
+                      : "Yes, Cancel"}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -283,7 +312,11 @@ function SubscriptionManagement({ navigation }) {
 function PricingPlans({ navigation }) {
   const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(null);
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const [rcOfferings, setRcOfferings] = useState(null);
+  const [restoringPurchases, setRestoringPurchases] = useState(false);
+
+  // Stripe hook (only used on Android)
+  const { initPaymentSheet, presentPaymentSheet } = useStripeHook();
 
   // Check if user has already used their free trial
   const hasUsedTrial = profile?.hasUsedTrial === true;
@@ -293,8 +326,122 @@ function PricingPlans({ navigation }) {
     ? plans.filter((plan) => plan.id !== "trial")
     : plans;
 
-  // Handle paid subscription with Stripe
-  const handlePaidSubscription = async (planId) => {
+  // Fetch RevenueCat offerings on iOS
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      fetchOfferings();
+    }
+  }, []);
+
+  const fetchOfferings = async () => {
+    try {
+      const offerings = await Purchases.getOfferings();
+      if (offerings.current) {
+        setRcOfferings(offerings.current);
+      }
+    } catch (error) {
+    }
+  };
+
+  // Get the RevenueCat package for a plan ID
+  const getRcPackage = (planId) => {
+    if (!rcOfferings) return null;
+    if (planId === "monthly") {
+      return rcOfferings.availablePackages.find(
+        (pkg) => pkg.packageType === "MONTHLY" || pkg.product.identifier === "tma_monthly_pro"
+      );
+    }
+    if (planId === "annual") {
+      return rcOfferings.availablePackages.find(
+        (pkg) => pkg.packageType === "ANNUAL" || pkg.product.identifier === "tma_annual_pro"
+      );
+    }
+    return null;
+  };
+
+  // Get display price from RevenueCat (localized) or fallback to static
+  const getDisplayPrice = (plan) => {
+    if (Platform.OS === "ios" && rcOfferings) {
+      const pkg = getRcPackage(plan.id);
+      if (pkg) {
+        return pkg.product.priceString;
+      }
+    }
+    return plan.price;
+  };
+
+  // Get button text with localized price on iOS
+  const getButtonText = (plan) => {
+    if (plan.id === "trial") return plan.buttonText;
+    if (Platform.OS === "ios" && rcOfferings) {
+      const pkg = getRcPackage(plan.id);
+      if (pkg) {
+        return `Get Started - ${pkg.product.priceString}${plan.period}`;
+      }
+    }
+    return plan.buttonText;
+  };
+
+  // Handle iOS purchase via RevenueCat
+  const handleIOSPurchase = async (planId) => {
+    const pkg = getRcPackage(planId);
+    if (!pkg) {
+      Alert.alert("Error", "Subscription package not available. Please try again later.");
+      return;
+    }
+
+    setLoading(planId);
+    try {
+      // Identify the user in RevenueCat with their Firebase UID
+      await Purchases.logIn(user.uid);
+
+      // Initiate the purchase
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
+
+      // Check if the purchase granted the "pro" entitlement
+      const isProActive = customerInfo.entitlements.active["pro"] !== undefined;
+
+      if (isProActive) {
+        // Get expiration date from the entitlement
+        const proEntitlement = customerInfo.entitlements.active["pro"];
+        const expirationDate = proEntitlement.expirationDate
+          ? new Date(proEntitlement.expirationDate).getTime()
+          : planId === "annual"
+            ? Date.now() + 365 * 24 * 60 * 60 * 1000
+            : Date.now() + 30 * 24 * 60 * 60 * 1000;
+
+        // Update Firebase with subscription data
+        const userRef = doc(db, "users", user.uid);
+        await updateDoc(userRef, {
+          subscription: {
+            status: "active",
+            plan: planId,
+            currentPeriodEnd: expirationDate,
+            cancelAtPeriodEnd: false,
+            purchaseSource: "apple",
+          },
+          updatedAt: Date.now(),
+        });
+
+        await refreshProfile();
+        Alert.alert(
+          "Success!",
+          `Your ${planId === "annual" ? "annual" : "monthly"} subscription is now active!`
+        );
+      }
+    } catch (error) {
+      if (error.userCancelled) {
+        // User cancelled - not an error
+        return;
+      }
+      Alert.alert("Error", error.message || "Failed to process purchase. Please try again.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle Android purchase via Stripe (existing flow)
+  const handleAndroidPurchase = async (planId) => {
     setLoading(planId);
     try {
       // 1. Create subscription on backend and get client secret
@@ -332,7 +479,6 @@ function PricingPlans({ navigation }) {
 
       if (paymentError) {
         if (paymentError.code === "Canceled") {
-          // User canceled - not an error
           return;
         }
         throw new Error(paymentError.message);
@@ -341,8 +487,8 @@ function PricingPlans({ navigation }) {
       // 4. Payment successful - update local profile
       const userRef = doc(db, "users", user.uid);
       const periodEnd = planId === "annual"
-        ? Date.now() + 365 * 24 * 60 * 60 * 1000  // 1 year
-        : Date.now() + 30 * 24 * 60 * 60 * 1000;  // 30 days
+        ? Date.now() + 365 * 24 * 60 * 60 * 1000
+        : Date.now() + 30 * 24 * 60 * 60 * 1000;
 
       await updateDoc(userRef, {
         subscription: {
@@ -352,6 +498,7 @@ function PricingPlans({ navigation }) {
           stripeSubscriptionId: subscriptionId,
           currentPeriodEnd: periodEnd,
           cancelAtPeriodEnd: false,
+          purchaseSource: "stripe",
         },
         updatedAt: Date.now(),
       });
@@ -362,7 +509,6 @@ function PricingPlans({ navigation }) {
         `Your ${planId === "annual" ? "annual" : "monthly"} subscription is now active!`
       );
     } catch (error) {
-      console.error("Subscription error:", error);
       Alert.alert("Error", error.message || "Failed to process payment. Please try again.");
     } finally {
       setLoading(null);
@@ -397,7 +543,7 @@ function PricingPlans({ navigation }) {
             currentPeriodEnd: trialEndDate,
             cancelAtPeriodEnd: false,
           },
-          hasUsedTrial: true, // Mark that user has used their free trial
+          hasUsedTrial: true,
           updatedAt: Date.now(),
         });
 
@@ -411,8 +557,54 @@ function PricingPlans({ navigation }) {
       return;
     }
 
-    // For paid plans (monthly/annual), use Stripe Payment Sheet
-    await handlePaidSubscription(planId);
+    // For paid plans: use RevenueCat on iOS, Stripe on Android
+    if (Platform.OS === "ios") {
+      await handleIOSPurchase(planId);
+    } else {
+      await handleAndroidPurchase(planId);
+    }
+  };
+
+  // Restore purchases (iOS only - Apple requires this)
+  const handleRestorePurchases = async () => {
+    setRestoringPurchases(true);
+    try {
+      await Purchases.logIn(user.uid);
+      const customerInfo = await Purchases.restorePurchases();
+      const isProActive = customerInfo.entitlements.active["pro"] !== undefined;
+
+      if (isProActive) {
+        const proEntitlement = customerInfo.entitlements.active["pro"];
+        const expirationDate = proEntitlement.expirationDate
+          ? new Date(proEntitlement.expirationDate).getTime()
+          : Date.now() + 30 * 24 * 60 * 60 * 1000;
+
+        // Determine plan type from the product identifier
+        const productId = proEntitlement.productIdentifier;
+        const plan = productId.includes("annual") ? "annual" : "monthly";
+
+        const userRef = doc(db, "users", user.uid);
+        await updateDoc(userRef, {
+          subscription: {
+            status: "active",
+            plan,
+            currentPeriodEnd: expirationDate,
+            cancelAtPeriodEnd: false,
+            purchaseSource: "apple",
+          },
+          updatedAt: Date.now(),
+        });
+
+        await refreshProfile();
+        Alert.alert("Restored!", "Your subscription has been restored successfully.");
+      } else {
+        Alert.alert("No Subscription Found", "No active subscription was found to restore.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to restore purchases. Please try again.");
+    } finally {
+      setRestoringPurchases(false);
+    }
   };
 
   return (
@@ -452,7 +644,7 @@ function PricingPlans({ navigation }) {
           <Text style={styles.planDescription}>{plan.description}</Text>
 
           <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>{plan.price}</Text>
+            <Text style={styles.priceAmount}>{getDisplayPrice(plan)}</Text>
             <Text style={styles.pricePeriod}>{plan.period}</Text>
           </View>
 
@@ -470,7 +662,7 @@ function PricingPlans({ navigation }) {
               loading === plan.id && styles.buttonDisabled,
             ]}
             onPress={() => handleSubscribe(plan.id)}
-            disabled={loading !== null}
+            disabled={loading !== null || restoringPurchases}
           >
             {loading === plan.id ? (
               <ActivityIndicator color={plan.highlighted ? COLORS.background : COLORS.primary} />
@@ -481,12 +673,27 @@ function PricingPlans({ navigation }) {
                   plan.highlighted && styles.planButtonTextHighlighted,
                 ]}
               >
-                {plan.buttonText}
+                {getButtonText(plan)}
               </Text>
             )}
           </TouchableOpacity>
         </View>
       ))}
+
+      {/* Restore Purchases - iOS only (Apple requires this) */}
+      {Platform.OS === "ios" && (
+        <TouchableOpacity
+          style={styles.restoreButton}
+          onPress={handleRestorePurchases}
+          disabled={restoringPurchases || loading !== null}
+        >
+          {restoringPurchases ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* Trust Badges */}
       <View style={styles.trustCard}>
@@ -497,7 +704,11 @@ function PricingPlans({ navigation }) {
               <Text style={styles.trustIconText}>🔒</Text>
             </View>
             <Text style={styles.trustItemTitle}>Secure Payments</Text>
-            <Text style={styles.trustItemText}>Bank-level security with encrypted transactions</Text>
+            <Text style={styles.trustItemText}>
+              {Platform.OS === "ios"
+                ? "Secure payments through Apple"
+                : "Bank-level security with encrypted transactions"}
+            </Text>
           </View>
           <View style={styles.trustItem}>
             <View style={styles.trustIcon}>
@@ -523,6 +734,7 @@ function PricingPlans({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   content: {
@@ -863,6 +1075,17 @@ const styles = StyleSheet.create({
   },
   planButtonTextHighlighted: {
     color: COLORS.background,
+  },
+  restoreButton: {
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  restoreButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: "500",
+    textDecorationLine: "underline",
   },
   trustCard: {
     backgroundColor: `${COLORS.primary}15`,

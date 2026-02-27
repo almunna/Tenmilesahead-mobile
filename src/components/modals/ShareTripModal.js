@@ -47,7 +47,6 @@ export default function ShareTripModal({ tripId, visible, onClose }) {
         }
       }
     } catch (error) {
-      console.error("Error generating share link:", error);
       Alert.alert("Error", "Failed to generate share link");
     } finally {
       setLoading(false);
@@ -66,7 +65,6 @@ export default function ShareTripModal({ tripId, visible, onClose }) {
         url: shareUrl,
       });
     } catch (error) {
-      console.error("Error sharing:", error);
     }
   }
 
@@ -84,7 +82,6 @@ export default function ShareTripModal({ tripId, visible, onClose }) {
       setShareToken(null);
       Alert.alert("Success", "Sharing has been disabled");
     } catch (error) {
-      console.error("Error disabling sharing:", error);
       Alert.alert("Error", "Failed to disable sharing");
     } finally {
       setLoading(false);

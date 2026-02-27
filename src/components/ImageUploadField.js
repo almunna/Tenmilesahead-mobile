@@ -105,7 +105,6 @@ export default function ImageUploadField({
 
       onImagesChange([...images, ...newImages]);
     } catch (error) {
-      console.error("Upload error:", error);
       Alert.alert("Upload failed", "There was an error uploading your images.");
     } finally {
       setUploading(false);

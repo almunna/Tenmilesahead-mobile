@@ -77,7 +77,7 @@ const features = [
   },
   {
     title: "Advanced Exports",
-    bullets: ["CSV export (soon)", "PDF flipbook (soon)", "Media backups"],
+    bullets: ["CSV export", "PDF flipbook", "Media backups"],
   },
   {
     title: "Share Privately",
@@ -305,8 +305,8 @@ export default function LandingScreen() {
               "Private share links",
               "Sync across all your devices",
               "Early access to new features",
-              "Offline flipbook (soon)",
-              "Export PDF/CSV (soon)",
+              "Offline flipbook viewing",
+              "Export PDF/CSV",
             ]}
             onPress={handleSubscribe}
           />
@@ -394,6 +394,7 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   // Hero Section

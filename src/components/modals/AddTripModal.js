@@ -102,8 +102,7 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
     form.cruiseLine === OTHER_CRUISE_LINE
       ? form.customCruiseLine
       : form.cruiseLine;
-  const cruiseShipValue =
-    form.cruiseShip === "Other" ? form.customCruiseShip : form.cruiseShip;
+  const cruiseShipValue = form.customCruiseShip || form.cruiseShip;
   const isCruiseComplete =
     !isCruise || (!!cruiseLineValue && !!cruiseShipValue);
 
@@ -336,7 +335,6 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
       resetForm();
       onClose();
     } catch (error) {
-      console.error("Error creating trip:", error);
       Alert.alert("Error", "Failed to create trip");
     } finally {
       setCreating(false);

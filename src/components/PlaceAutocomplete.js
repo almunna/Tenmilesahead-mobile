@@ -53,7 +53,6 @@ export default function PlaceAutocomplete({
         setShowSuggestions(false);
       }
     } catch (error) {
-      console.error("Error fetching place suggestions:", error);
       setSuggestions([]);
       setShowSuggestions(false);
     } finally {
@@ -183,7 +182,6 @@ export default function PlaceAutocomplete({
         );
       }
     } catch (error) {
-      console.error("Error fetching place details:", error);
       // Use prediction name as fallback
       onChange(
         prediction.structured_formatting?.main_text || prediction.description

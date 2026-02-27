@@ -334,7 +334,6 @@ export default function PlaceModal({
       resetForm();
       setShowAddForm(false);
     } catch (error) {
-      console.error("Error saving place:", error);
       Alert.alert("Error", "Failed to save place");
     } finally {
       setUploading(false);
@@ -343,23 +342,7 @@ export default function PlaceModal({
 
   async function handleDelete(id) {
     try {
-      // Delete photos first
-      const photoSnap = await getDocs(
-        collection(db, "trips", tripId, subcollection, id, "photos")
-      );
-
-      for (const photoDoc of photoSnap.docs) {
-        const photo = photoDoc.data();
-        if (photo.storagePath) {
-          const sref = storageRef(storage, photo.storagePath);
-          await deleteObject(sref);
-        }
-        await deleteDoc(
-          doc(db, "trips", tripId, subcollection, id, "photos", photoDoc.id)
-        );
-      }
-
-      // Delete documents from trips/{tripId}/media collection
+      // Delete linked documents from trips/{tripId}/media collection
       const mediaSnap = await getDocs(collection(db, "trips", tripId, "media"));
       for (const mediaDoc of mediaSnap.docs) {
         const mediaData = mediaDoc.data();
@@ -380,7 +363,6 @@ export default function PlaceModal({
       await deleteDoc(doc(db, "trips", tripId, subcollection, id));
       setDeleteId(null);
     } catch (error) {
-      console.error("Error deleting place:", error);
       Alert.alert("Error", "Failed to delete place");
     }
   }
@@ -458,7 +440,6 @@ export default function PlaceModal({
       });
       setPlacePhotos((prev) => ({ ...prev, [placeId]: photos }));
     } catch (error) {
-      console.error("Error uploading photos:", error);
       Alert.alert("Upload failed", error.message);
     } finally {
       setUploading(false);
@@ -480,7 +461,6 @@ export default function PlaceModal({
         [placeId]: (prev[placeId] || []).filter((p) => p.id !== photoId),
       }));
     } catch (error) {
-      console.error("Error deleting photo:", error);
       Alert.alert("Error", "Failed to delete photo");
     }
   }
@@ -505,7 +485,6 @@ export default function PlaceModal({
         uploadDocuments(placeId, result.assets);
       }
     } catch (error) {
-      console.error("Error picking documents:", error);
       Alert.alert("Error", "Failed to pick documents");
     }
   }
@@ -564,7 +543,6 @@ export default function PlaceModal({
       });
       setPlaceDocuments((prev) => ({ ...prev, [placeId]: docs }));
     } catch (error) {
-      console.error("Error uploading documents:", error);
       Alert.alert("Upload failed", error.message);
     } finally {
       setUploadingDocuments(false);
@@ -586,14 +564,12 @@ export default function PlaceModal({
         [placeId]: (prev[placeId] || []).filter((d) => d.id !== docId),
       }));
     } catch (error) {
-      console.error("Error deleting document:", error);
       Alert.alert("Error", "Failed to delete document");
     }
   }
 
   function openDocument(url) {
     Linking.openURL(url).catch((err) => {
-      console.error("Error opening document:", err);
       Alert.alert("Error", "Unable to open document");
     });
   }
@@ -618,7 +594,6 @@ export default function PlaceModal({
         setPendingDocuments((prev) => [...prev, ...result.assets]);
       }
     } catch (error) {
-      console.error("Error picking documents:", error);
       Alert.alert("Error", "Failed to pick documents");
     }
   }

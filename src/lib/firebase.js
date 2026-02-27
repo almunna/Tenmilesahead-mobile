@@ -46,12 +46,10 @@ try {
     });
   }
 } catch (error) {
-  console.log("Auth initialization error:", error.message);
   // Fallback to getAuth
   try {
     auth = getAuth(app);
   } catch (e) {
-    console.error("Failed to initialize auth:", e);
   }
 }
 

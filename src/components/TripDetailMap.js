@@ -76,7 +76,6 @@ async function geocodeLocation(address, city, state, country) {
     );
 
     if (!response.ok) {
-      console.warn(`Geocoding HTTP error: ${response.status}`);
       geocodeCache.set(cacheKey, null);
       return null;
     }
@@ -165,7 +164,6 @@ async function geocodeLocation(address, city, state, country) {
     geocodeCache.set(cacheKey, null);
     return null;
   } catch (error) {
-    console.error(`Error geocoding ${city}, ${country}:`, error);
     geocodeCache.set(cacheKey, null);
     return null;
   }

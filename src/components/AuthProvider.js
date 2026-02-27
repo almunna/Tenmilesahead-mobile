@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import Purchases from "react-native-purchases";
 import { auth, db } from "../lib/firebase";
 
 const AuthContext = createContext({
@@ -22,6 +24,7 @@ export default function AuthProvider({ children }) {
 
   // Keep the latest profile unsubscribe so we can tear it down properly
   const profileUnsubRef = useRef(null);
+  const rcListenerRef = useRef(null);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
@@ -29,6 +32,12 @@ export default function AuthProvider({ children }) {
       if (profileUnsubRef.current) {
         profileUnsubRef.current();
         profileUnsubRef.current = null;
+      }
+
+      // Tear down RevenueCat listener
+      if (rcListenerRef.current) {
+        rcListenerRef.current.remove();
+        rcListenerRef.current = null;
       }
 
       setUser(u);
@@ -65,12 +74,15 @@ export default function AuthProvider({ children }) {
             setLoading(false);
           },
           (err) => {
-            console.error("Profile listener error:", err);
             setLoading(false);
           }
         );
+
+        // Set up RevenueCat listener on iOS to sync subscription state
+        if (Platform.OS === "ios") {
+          setupRevenueCatListener(u.uid);
+        }
       } catch (e) {
-        console.error("Auth/profile bootstrap error:", e);
         setLoading(false);
       }
     });
@@ -82,8 +94,55 @@ export default function AuthProvider({ children }) {
         profileUnsubRef.current();
         profileUnsubRef.current = null;
       }
+      if (rcListenerRef.current) {
+        rcListenerRef.current.remove();
+        rcListenerRef.current = null;
+      }
     };
   }, []);
+
+  function setupRevenueCatListener(uid) {
+    rcListenerRef.current = Purchases.addCustomerInfoUpdateListener(
+      async (customerInfo) => {
+        try {
+          const proEntitlement = customerInfo.entitlements.active["pro"];
+          const userRef = doc(db, "users", uid);
+
+          if (proEntitlement) {
+            // Subscription is active - sync to Firebase
+            const expirationDate = proEntitlement.expirationDate
+              ? new Date(proEntitlement.expirationDate).getTime()
+              : null;
+
+            const productId = proEntitlement.productIdentifier || "";
+            const plan = productId.includes("annual") ? "annual" : "monthly";
+
+            await updateDoc(userRef, {
+              "subscription.status": "active",
+              "subscription.plan": plan,
+              "subscription.cancelAtPeriodEnd": proEntitlement.willRenew === false,
+              ...(expirationDate && { "subscription.currentPeriodEnd": expirationDate }),
+              "subscription.purchaseSource": "apple",
+              updatedAt: Date.now(),
+            });
+          } else {
+            // No active entitlement - check if subscription previously existed from Apple
+            const snap = await getDoc(userRef);
+            const data = snap.data();
+            if (data?.subscription?.purchaseSource === "apple" && data?.subscription?.status === "active") {
+              // Subscription expired or was canceled through Apple
+              await updateDoc(userRef, {
+                "subscription.status": "canceled",
+                "subscription.cancelAtPeriodEnd": true,
+                updatedAt: Date.now(),
+              });
+            }
+          }
+        } catch (error) {
+        }
+      }
+    );
+  }
 
   async function refreshProfile() {
     if (!user) return;
@@ -96,7 +155,6 @@ export default function AuthProvider({ children }) {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Sign out error:", error);
     }
   }
 

@@ -56,7 +56,6 @@ export default function TutorialsScreen({ navigation }) {
       setTutorials(tutorialsData);
       setFilteredTutorials(tutorialsData);
     } catch (error) {
-      console.error("Error loading tutorials:", error);
     } finally {
       setLoading(false);
     }
@@ -69,7 +68,6 @@ export default function TutorialsScreen({ navigation }) {
         return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
       }
     } catch (error) {
-      console.error("Error extracting YouTube ID:", error);
     }
     return null;
   }
@@ -81,7 +79,6 @@ export default function TutorialsScreen({ navigation }) {
         return `https://www.youtube.com/embed/${videoId}`;
       }
     } catch (error) {
-      console.error("Error extracting YouTube ID:", error);
     }
     return "";
   }
@@ -111,9 +108,7 @@ export default function TutorialsScreen({ navigation }) {
   }
 
   function openVideo(url) {
-    Linking.openURL(url).catch((err) =>
-      console.error("Error opening video:", err),
-    );
+    Linking.openURL(url).catch(() => {});
   }
 
   if (loading) {
@@ -294,6 +289,7 @@ export default function TutorialsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   content: {

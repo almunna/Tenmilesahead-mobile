@@ -94,119 +94,167 @@ function GlobalReviewsInner({ navigation }) {
     );
   }
 
+  const REVIEWS_PER_LOAD = 10;
   const [allReviews, setAllReviews] = useState([]);
+  const [tripDocs, setTripDocs] = useState([]);
+  const [loadedTripCount, setLoadedTripCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedType, setSelectedType] = useState("All Types");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(10);
   const [selectedReview, setSelectedReview] = useState(null);
   const [editingReview, setEditingReview] = useState(null);
   const [addingReviewForPlace, setAddingReviewForPlace] = useState(null);
 
   useEffect(() => {
-    loadReviews();
+    loadTrips();
   }, []);
 
-  const loadReviews = async () => {
+  const loadTrips = async () => {
     try {
       setLoading(true);
       const tripsSnapshot = await getDocs(collection(db, "trips"));
-      const reviews = [];
-
-      for (const tripDoc of tripsSnapshot.docs) {
-        const tripId = tripDoc.id;
-        const tripData = tripDoc.data();
-        const ownerId = tripData.ownerId || "";
-
-        let ownerUsername;
-        if (ownerId) {
-          try {
-            const userDoc = await getDoc(doc(db, "users", ownerId));
-            if (userDoc.exists()) {
-              ownerUsername = userDoc.data().username;
-            }
-          } catch (e) {
-            console.error("Error fetching username:", e);
-          }
-        }
-
-        const subcollections = [
-          { name: "destinations", type: "Destinations" },
-          { name: "activities", type: "Activities" },
-          { name: "accommodations", type: "Accommodations" },
-          { name: "restaurants", type: "Restaurants" },
-          { name: "cruises", type: "Cruises" },
-        ];
-
-        for (const { name, type } of subcollections) {
-          const snapshot = await getDocs(
-            query(
-              collection(db, "trips", tripId, name),
-              orderBy("createdAt", "desc"),
-            ),
-          );
-
-          for (const reviewDoc of snapshot.docs) {
-            const data = reviewDoc.data();
-
-            const mediaSnapshot = await getDocs(
-              query(
-                collection(db, "trips", tripId, "media"),
-                where("linkedSubcollection", "==", name),
-                where("linkedId", "==", reviewDoc.id),
-              ),
-            );
-
-            const mediaItems = mediaSnapshot.docs.map((mediaDoc) => ({
-              id: mediaDoc.id,
-              ...mediaDoc.data(),
-            }));
-
-            const calculateOverallRating = () => {
-              const ratings = [];
-              if (data.qualityRating) ratings.push(data.qualityRating);
-              if (data.valueRating) ratings.push(data.valueRating);
-              if (data.serviceRating) ratings.push(data.serviceRating);
-              if (data.locationRating) ratings.push(data.locationRating);
-              if (ratings.length === 0) return 0;
-              return ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
-            };
-
-            reviews.push({
-              id: reviewDoc.id,
-              tripId,
-              ownerId,
-              ownerUsername,
-              type,
-              placeName: data.name || "Unnamed Place",
-              city: data.city || "",
-              state: data.state || null,
-              country: data.country || "",
-              address: data.address || null,
-              phone: data.phoneNumber || null,
-              websiteUrl: data.websiteUrl || null,
-              notes: data.review || data.notes || null,
-              visitDate: data.startDate || null,
-              createdAt: data.createdAt || Date.now(),
-              mediaItems,
-              overallRating: calculateOverallRating(),
-              qualityRating: data.qualityRating || 0,
-              serviceRating: data.serviceRating || 0,
-              valueRating: data.valueRating || 0,
-              locationRating: data.locationRating || 0,
-              cruiseLine: data.cruiseLine || undefined,
-              shipName: data.shipName || undefined,
-            });
-          }
-        }
+      const trips = tripsSnapshot.docs.map((tripDoc) => ({
+        id: tripDoc.id,
+        ownerId: tripDoc.data().ownerId || "",
+      }));
+      setTripDocs(trips);
+      if (trips.length > 0) {
+        await loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0);
       }
-
-      reviews.sort((a, b) => b.createdAt - a.createdAt);
-      setAllReviews(reviews);
     } catch (error) {
-      console.error("Error loading reviews:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadReviewsUntilCount = async (trips, existingReviews, targetCount, startTripIndex) => {
+    let currentReviews = [...existingReviews];
+    let tripIndex = startTripIndex;
+    while (currentReviews.length < targetCount && tripIndex < trips.length) {
+      const newReviews = await loadReviewsFromSingleTrip(trips[tripIndex]);
+      currentReviews = [...currentReviews, ...newReviews];
+      tripIndex++;
+    }
+    currentReviews.sort((a, b) => b.createdAt - a.createdAt);
+    setAllReviews(currentReviews);
+    setLoadedTripCount(tripIndex);
+    return currentReviews;
+  };
+
+  const loadReviewsFromSingleTrip = async (trip) => {
+    let ownerUsername;
+    if (trip.ownerId) {
+      try {
+        const userDoc = await getDoc(doc(db, "users", trip.ownerId));
+        if (userDoc.exists()) ownerUsername = userDoc.data().username;
+      } catch (e) {}
+    }
+    const subcollections = [
+      { name: "destinations", type: "Destinations" },
+      { name: "activities", type: "Activities" },
+      { name: "accommodations", type: "Accommodations" },
+      { name: "restaurants", type: "Restaurants" },
+      { name: "cruises", type: "Cruises" },
+    ];
+    const results = await Promise.all(
+      subcollections.map(({ name, type }) =>
+        fetchReviewsFromSubcollection(trip.id, name, type, trip.ownerId, ownerUsername)
+      )
+    );
+    return results.flat();
+  };
+
+  const fetchReviewsFromSubcollection = async (tripId, subcollectionName, type, ownerId, ownerUsername) => {
+    try {
+      const snapshot = await getDocs(
+        query(collection(db, "trips", tripId, subcollectionName), orderBy("createdAt", "desc"))
+      );
+      const reviews = [];
+      for (const reviewDoc of snapshot.docs) {
+        const data = reviewDoc.data();
+        const mediaSnapshot = await getDocs(
+          query(
+            collection(db, "trips", tripId, "media"),
+            where("linkedSubcollection", "==", subcollectionName),
+            where("linkedId", "==", reviewDoc.id),
+          )
+        );
+        const mediaItems = mediaSnapshot.docs.map((mediaDoc) => ({
+          id: mediaDoc.id,
+          ...mediaDoc.data(),
+        }));
+        const calculateOverallRating = () => {
+          const ratings = [];
+          if (data.qualityRating) ratings.push(data.qualityRating);
+          if (data.valueRating) ratings.push(data.valueRating);
+          if (data.serviceRating) ratings.push(data.serviceRating);
+          if (data.locationRating) ratings.push(data.locationRating);
+          if (ratings.length === 0) return 0;
+          return ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+        };
+        reviews.push({
+          id: reviewDoc.id,
+          tripId,
+          ownerId,
+          ownerUsername,
+          type,
+          placeName: data.name || "Unnamed Place",
+          city: data.city || "",
+          state: data.state || null,
+          country: data.country || "",
+          address: data.address || null,
+          phone: data.phoneNumber || null,
+          websiteUrl: data.websiteUrl || null,
+          notes: data.review || data.notes || null,
+          visitDate: data.startDate || null,
+          createdAt: data.createdAt || Date.now(),
+          mediaItems,
+          overallRating: calculateOverallRating(),
+          qualityRating: data.qualityRating || 0,
+          serviceRating: data.serviceRating || 0,
+          valueRating: data.valueRating || 0,
+          locationRating: data.locationRating || 0,
+          cruiseLine: data.cruiseLine || undefined,
+          shipName: data.shipName || undefined,
+        });
+      }
+      return reviews;
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const loadMoreTrips = async () => {
+    if (loadingMore || loadedTripCount >= tripDocs.length) return;
+    setLoadingMore(true);
+    try {
+      const targetCount = allReviews.length + REVIEWS_PER_LOAD;
+      await loadReviewsUntilCount(tripDocs, allReviews, targetCount, loadedTripCount);
+    } catch (error) {
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Full reload used after edit/delete
+  const loadReviews = async () => {
+    try {
+      setLoading(true);
+      setAllReviews([]);
+      setLoadedTripCount(0);
+      const tripsSnapshot = await getDocs(collection(db, "trips"));
+      const trips = tripsSnapshot.docs.map((tripDoc) => ({
+        id: tripDoc.id,
+        ownerId: tripDoc.data().ownerId || "",
+      }));
+      setTripDocs(trips);
+      if (trips.length > 0) {
+        await loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0);
+      }
+    } catch (error) {
     } finally {
       setLoading(false);
     }
@@ -226,8 +274,6 @@ function GlobalReviewsInner({ navigation }) {
       selectedLocation === "All Locations" || review.city === selectedLocation;
     return matchesType && matchesLocation;
   });
-
-  const visibleReviews = filteredReviews.slice(0, visibleCount);
 
   const renderStars = (rating) => {
     return [...Array(5)].map((_, i) => (
@@ -339,7 +385,6 @@ function GlobalReviewsInner({ navigation }) {
 
       setEditingReview(null);
     } catch (error) {
-      console.error("Error updating review:", error);
       Alert.alert("Error", "Failed to update review. Please try again.");
     }
   };
@@ -390,8 +435,8 @@ function GlobalReviewsInner({ navigation }) {
         </View>
 
         <Text style={styles.resultCount}>
-          Showing {Math.min(visibleCount, filteredReviews.length)} of{" "}
-          {filteredReviews.length} reviews
+          Showing {filteredReviews.length} reviews
+          {loadedTripCount < tripDocs.length ? " • more available" : ""}
         </Text>
       </View>
 
@@ -406,7 +451,6 @@ function GlobalReviewsInner({ navigation }) {
                 onPress={() => {
                   setSelectedLocation(location);
                   setShowLocationDropdown(false);
-                  setVisibleCount(10);
                 }}
               >
                 <Text style={styles.dropdownItemText}>{location}</Text>
@@ -425,7 +469,6 @@ function GlobalReviewsInner({ navigation }) {
               onPress={() => {
                 setSelectedType(type);
                 setShowTypeDropdown(false);
-                setVisibleCount(10);
               }}
             >
               <Text style={styles.dropdownItemText}>{type}</Text>
@@ -445,7 +488,7 @@ function GlobalReviewsInner({ navigation }) {
           </Text>
         ) : (
           <>
-            {visibleReviews.map((review) => (
+            {filteredReviews.map((review) => (
               <TouchableOpacity
                 key={`${review.id}-${review.tripId}`}
                 style={styles.reviewCard}
@@ -637,12 +680,17 @@ function GlobalReviewsInner({ navigation }) {
             ))}
 
             {/* Load More */}
-            {visibleCount < filteredReviews.length && (
+            {loadedTripCount < tripDocs.length && (
               <TouchableOpacity
                 style={styles.loadMoreButton}
-                onPress={() => setVisibleCount((prev) => prev + 10)}
+                onPress={loadMoreTrips}
+                disabled={loadingMore}
               >
-                <Text style={styles.loadMoreButtonText}>Load More</Text>
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.loadMoreButtonText}>Load More</Text>
+                )}
               </TouchableOpacity>
             )}
           </>
@@ -942,7 +990,6 @@ function EditReviewModal({ review, onClose, onSave }) {
           }
           await deleteDoc(doc(db, "trips", review.tripId, "media", media.id));
         } catch (err) {
-          console.error("Error deleting media:", err);
         }
       }
 
@@ -961,7 +1008,6 @@ function EditReviewModal({ review, onClose, onSave }) {
 
       await onSave(updatedReview);
     } catch (error) {
-      console.error("Error saving review:", error);
       Alert.alert("Error", "Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
@@ -1330,14 +1376,12 @@ function AddReviewModal({
               createdAt: Date.now(),
             });
           } catch (photoError) {
-            console.error("Error uploading photo:", photoError);
           }
         }
       }
 
       await onSave();
     } catch (error) {
-      console.error("Error adding review:", error);
       Alert.alert("Error", "Failed to add review. Please try again.");
     } finally {
       setSaving(false);
@@ -1502,7 +1546,7 @@ function AddReviewModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   loadingContainer: {

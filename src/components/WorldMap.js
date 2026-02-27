@@ -91,7 +91,6 @@ export default function WorldMap({ trips, user }) {
       setVisitedCountries(Array.from(countries));
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching destinations:", error);
       setLoading(false);
     }
   }
@@ -508,7 +507,6 @@ export default function WorldMap({ trips, user }) {
           }).addTo(map);
         })
         .catch(error => {
-          console.error('Error loading country boundaries:', error);
         });
     }
 

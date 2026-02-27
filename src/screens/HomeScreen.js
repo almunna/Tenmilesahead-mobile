@@ -202,7 +202,6 @@ export default function HomeScreen() {
       await deleteDoc(doc(db, "trips", deleteTrip.id));
       setDeleteTrip(null);
     } catch (error) {
-      console.error("Error deleting trip:", error);
     }
   }
 
@@ -509,7 +508,6 @@ export default function HomeScreen() {
           accommodationCounts: accommodationCounts,
         });
       } catch (error) {
-        console.error("Error calculating stats:", error);
       }
     };
 
@@ -995,6 +993,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   content: {

@@ -75,7 +75,6 @@ function ReviewsInner({ navigation }) {
     // Set a timeout to auto-cancel if loading takes too long
     const timeout = setTimeout(() => {
       if (loading) {
-        console.log("Review loading timeout - stopping");
         setLoading(false);
       }
     }, 30000); // 30 second timeout
@@ -122,7 +121,6 @@ function ReviewsInner({ navigation }) {
             return { tripId, ownerId: tripDoc.data().ownerId || "" };
           }
         } catch (e) {
-          console.error(`Failed to fetch trip ${tripId}:`, e);
         }
         return null;
       });
@@ -242,7 +240,6 @@ function ReviewsInner({ navigation }) {
                   }
                 }
               } catch (e) {
-                console.error("Error fetching media:", e);
               }
             }
             return out;
@@ -259,7 +256,6 @@ function ReviewsInner({ navigation }) {
 
       setTiles(withThumbs);
     } catch (error) {
-      console.error("Error loading reviews:", error);
     } finally {
       setLoading(false);
     }
@@ -541,6 +537,7 @@ function ReviewsInner({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   loadingContainer: {

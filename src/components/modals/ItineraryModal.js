@@ -163,7 +163,6 @@ export default function ItineraryModal({ tripId, visible, onClose }) {
       setItems(allItems);
       setLoading(false);
     } catch (error) {
-      console.error("Error fetching itinerary items:", error);
       setLoading(false);
     }
   }

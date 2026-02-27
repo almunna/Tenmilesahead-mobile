@@ -21,12 +21,18 @@ export default function SignupScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSignUp() {
     if (!email || !username || !password || !confirmPassword) {
       setError("Please fill in all fields");
+      return;
+    }
+
+    if (!agreedToTerms) {
+      setError("You must agree to the Privacy Policy and Terms of Service");
       return;
     }
 
@@ -162,10 +168,37 @@ export default function SignupScreen({ navigation }) {
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
+          {/* Privacy & Terms Consent */}
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={styles.consentRow}
+            onPress={() => setAgreedToTerms(!agreedToTerms)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+              {agreedToTerms && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.consentText}>
+              I agree to the{" "}
+              <Text
+                style={styles.consentLink}
+                onPress={() => navigation.navigate(SCREENS.PRIVACY)}
+              >
+                Privacy Policy
+              </Text>
+              {" "}and{" "}
+              <Text
+                style={styles.consentLink}
+                onPress={() => navigation.navigate(SCREENS.TERMS)}
+              >
+                Terms of Service
+              </Text>
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, (loading || !agreedToTerms) && styles.buttonDisabled]}
             onPress={handleSignUp}
-            disabled={loading}
+            disabled={loading || !agreedToTerms}
           >
             <Text style={styles.buttonText}>
               {loading ? "Creating account..." : "Create Account"}
@@ -187,6 +220,7 @@ export default function SignupScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: COLORS.background,
   },
   scrollContent: {
@@ -271,5 +305,40 @@ const styles = StyleSheet.create({
   linkText: {
     color: COLORS.primary,
     fontSize: scaleFontSize(14),
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: scaleSpacing(SPACING.md),
+    gap: scaleSpacing(SPACING.sm),
+  },
+  checkbox: {
+    width: scaleFontSize(22),
+    height: scaleFontSize(22),
+    borderRadius: scaleFontSize(4),
+    borderWidth: 2,
+    borderColor: COLORS.muted,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: scaleFontSize(14),
+    fontWeight: "bold",
+  },
+  consentText: {
+    flex: 1,
+    fontSize: scaleFontSize(13),
+    color: COLORS.muted,
+    lineHeight: scaleFontSize(20),
+  },
+  consentLink: {
+    color: COLORS.primary,
+    textDecorationLine: "underline",
   },
 });

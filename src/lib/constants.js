@@ -123,23 +123,30 @@ export const SCREENS = {
   SHARE_TRIP: "ShareTrip",
   REVIEWS: "Reviews",
 
-  // Admin screens
-  ADMIN: "Admin",
-  ADMIN_LOGIN: "AdminLogin",
-  ADMIN_USERS: "AdminUsers",
-  ADMIN_ANALYTICS: "AdminAnalytics",
-  ADMIN_TUTORIALS: "AdminTutorials",
 };
 
 // ============================================
-// STRIPE CONFIGURATION - UPDATE THESE VALUES
+// STRIPE CONFIGURATION (Android only)
 // ============================================
 
 // Your deployed web app URL
 export const API_BASE_URL = "https://tenmilesahead.com";
 
-// Stripe publishable key
+// Stripe publishable key (used on Android)
 export const STRIPE_PUBLISHABLE_KEY = "pk_test_51RHzInLfV8BTXj9A0YEedXrCH1S3vigKBqYEGvNXt0GIzSQa1mEGBHTWmUqsn5IAFxLRTN4t64S3qpmC7Oo8nLSZ00KzGjpk59";
+
+// ============================================
+// REVENUECAT CONFIGURATION (iOS In-App Purchase)
+// ============================================
+
+// Replace with your RevenueCat Public API Key from the RevenueCat dashboard
+export const REVENUECAT_API_KEY_IOS = "appl_srrrvckwndOBIovzWfMQIFouHar";
+
+// RevenueCat product identifiers (must match App Store Connect product IDs)
+export const RC_PRODUCT_IDS = {
+  MONTHLY: "tma_monthly_pro",
+  ANNUAL: "tma_annual_pro",
+};
 
 // API endpoints (for Stripe and other services)
 export const API_ENDPOINTS = {
@@ -161,14 +168,12 @@ export const SUBSCRIPTION_PLANS = {
       "Unlimited trips",
       "Photo uploads",
       "Trip sharing",
-      "Basic analytics",
     ],
   },
   MONTHLY: {
     id: "monthly",
     name: "Monthly",
     price: 3.99,
-    priceId: "YOUR_STRIPE_MONTHLY_PRICE_ID",
     duration: "month",
     features: [
       "Everything in Free Trial",
@@ -181,7 +186,6 @@ export const SUBSCRIPTION_PLANS = {
     id: "annual",
     name: "Annual",
     price: 39.99,
-    priceId: "YOUR_STRIPE_ANNUAL_PRICE_ID",
     duration: "year",
     savings: "Save $8",
     features: [

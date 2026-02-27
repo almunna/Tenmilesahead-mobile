@@ -96,8 +96,7 @@ export default function EditTripModal({ tripId, visible, onClose }) {
     form.cruiseLine === OTHER_CRUISE_LINE
       ? form.customCruiseLine
       : form.cruiseLine;
-  const cruiseShipValue =
-    form.cruiseShip === "Other" ? form.customCruiseShip : form.cruiseShip;
+  const cruiseShipValue = form.customCruiseShip || form.cruiseShip;
 
   const sortedCountries = useMemo(() => {
     const withOther = new Set([...COUNTRIES, "Other", "Others"]);
@@ -190,7 +189,6 @@ export default function EditTripModal({ tripId, visible, onClose }) {
           }
         }
       } catch (error) {
-        console.error("Error loading trip:", error);
         Alert.alert("Error", "Failed to load trip data");
       } finally {
         setLoading(false);
@@ -278,7 +276,6 @@ export default function EditTripModal({ tripId, visible, onClose }) {
           }
           await deleteDoc(doc(db, "trips", tripId, "media", media.id));
         } catch (error) {
-          console.error("Error deleting media:", error);
         }
       }
 
@@ -327,7 +324,6 @@ export default function EditTripModal({ tripId, visible, onClose }) {
             firstNewImageId = mediaId;
           }
         } catch (mediaError) {
-          console.error("Error uploading media:", mediaError);
           // Continue with other media uploads
         }
       }
@@ -414,14 +410,12 @@ export default function EditTripModal({ tripId, visible, onClose }) {
           await deleteDoc(doc(db, "trips", tripId, "cruises", cruiseReview.id));
         }
       } catch (cruiseError) {
-        console.error("Error saving cruise review:", cruiseError);
         // Don't fail the whole save for cruise review errors
       }
 
       Alert.alert("Success", "Trip updated successfully");
       onClose();
     } catch (error) {
-      console.error("Error updating trip:", error);
       Alert.alert("Error", "Failed to update trip. Please try again.");
     } finally {
       setSaving(false);
