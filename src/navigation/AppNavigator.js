@@ -21,6 +21,9 @@ import FAQsScreen from "../screens/FAQsScreen";
 import TutorialsScreen from "../screens/TutorialsScreen";
 import PrivacyScreen from "../screens/PrivacyScreen";
 import TermsScreen from "../screens/TermsScreen";
+import HelpSupportScreen from "../screens/HelpSupportScreen";
+import BadgesScreen from "../screens/BadgesScreen";
+import BookingsScreen from "../screens/BookingsScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -95,6 +98,21 @@ function HomeStack() {
         component={TermsScreen}
         options={{ title: "Terms of Service" }}
       />
+      <Stack.Screen
+        name={SCREENS.HELP_SUPPORT}
+        component={HelpSupportScreen}
+        options={{ title: "Help & Support" }}
+      />
+      <Stack.Screen
+        name={SCREENS.BADGES}
+        component={BadgesScreen}
+        options={{ title: "My Badges" }}
+      />
+      <Stack.Screen
+        name={SCREENS.BOOKINGS}
+        component={BookingsScreen}
+        options={{ title: "Bookings" }}
+      />
     </Stack.Navigator>
   );
 }
@@ -144,6 +162,11 @@ function LandingStack() {
         component={TermsScreen}
         options={{ title: "Terms of Service" }}
       />
+      <Stack.Screen
+        name={SCREENS.HELP_SUPPORT}
+        component={HelpSupportScreen}
+        options={{ title: "Help & Support" }}
+      />
     </Stack.Navigator>
   );
 }
@@ -173,6 +196,11 @@ function TripsStack() {
         component={ReviewsScreen}
         options={{ title: "Reviews" }}
       />
+      <Stack.Screen
+        name={SCREENS.BOOKINGS}
+        component={BookingsScreen}
+        options={{ title: "Bookings" }}
+      />
     </Stack.Navigator>
   );
 }
@@ -200,6 +228,15 @@ function AuthenticatedTabs() {
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused} icon="✈️" label="Trips" />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name={SCREENS.BOOKINGS}
+        component={BookingsScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} icon="📋" label="Bookings" />
           ),
         }}
       />
@@ -266,6 +303,21 @@ function UnauthenticatedTabs() {
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused} icon="✈️" label="Trips" />
+          ),
+        }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate(SCREENS.LANDING, { screen: SCREENS.SIGNIN });
+          },
+        })}
+      />
+      <Tab.Screen
+        name="BookingsTab"
+        component={LandingStack}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} icon="📋" label="Bookings" />
           ),
         }}
         listeners={({ navigation }) => ({

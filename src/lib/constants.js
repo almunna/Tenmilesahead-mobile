@@ -122,7 +122,28 @@ export const SCREENS = {
   TERMS: "Terms",
   SHARE_TRIP: "ShareTrip",
   REVIEWS: "Reviews",
+  HELP_SUPPORT: "HelpSupport",
+  BADGES: "Badges",
+  BOOKINGS: "Bookings",
+};
 
+// ============================================
+// GOOGLE OAUTH CONFIGURATION
+// ============================================
+// Get these from Firebase Console → Authentication → Sign-in method → Google
+// → Web SDK configuration / or Google Cloud Console → APIs → Credentials
+//
+// IMPORTANT: Enable Google Sign-In in Firebase Console first, then paste the
+// client IDs here.
+//
+// webClientId:     Firebase Console → Project Settings → Web app → OAuth client ID
+//                  (also visible in Google Cloud Console under "Web client (auto created)")
+// iosClientId:     Firebase Console → Project Settings → iOS app config
+// androidClientId: Firebase Console → Project Settings → Android app config
+export const GOOGLE_OAUTH_CONFIG = {
+  webClientId: "113477560951-tgedj26mha307cht319o18kf36jkrv4f.apps.googleusercontent.com",
+  iosClientId: "113477560951-tgedj26mha307cht319o18kf36jkrv4f.apps.googleusercontent.com",
+  androidClientId: "113477560951-tgedj26mha307cht319o18kf36jkrv4f.apps.googleusercontent.com",
 };
 
 // ============================================

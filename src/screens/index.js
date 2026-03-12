@@ -12,3 +12,5 @@ export { default as FAQsScreen } from "./FAQsScreen";
 export { default as TutorialsScreen } from "./TutorialsScreen";
 export { default as PrivacyScreen } from "./PrivacyScreen";
 export { default as TermsScreen } from "./TermsScreen";
+export { default as HelpSupportScreen } from "./HelpSupportScreen";
+export { default as BookingsScreen } from "./BookingsScreen";

@@ -58,6 +58,7 @@ export default function TripDetailScreen() {
   const [accommodations, setAccommodations] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [cruises, setCruises] = useState([]);
+  const [extras, setExtras] = useState([]);
 
   // Modals
   const [editingCaption, setEditingCaption] = useState(null);
@@ -186,12 +187,25 @@ export default function TripDetailScreen() {
       }
     );
 
+    const unsubExtras = onSnapshot(
+      query(
+        collection(db, "trips", tripId, "extras"),
+        orderBy("createdAt", "desc")
+      ),
+      (snap) => {
+        const arr = [];
+        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+        setExtras(arr);
+      }
+    );
+
     return () => {
       unsubDest();
       unsubAct();
       unsubAcc();
       unsubRest();
       unsubCruise();
+      unsubExtras();
     };
   }, [tripId]);
 
@@ -249,6 +263,19 @@ export default function TripDetailScreen() {
       return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
     }
     return phone;
+  }
+
+  async function deleteExtra(extraId) {
+    Alert.alert("Delete Extra", "Are you sure you want to delete this item?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteDoc(doc(db, "trips", tripId, "extras", extraId));
+        },
+      },
+    ]);
   }
 
   async function handleViewPhotos(itemId, subcollection) {
@@ -543,6 +570,13 @@ export default function TripDetailScreen() {
           formatDate={formatDate}
           formatPhone={formatPhoneNumber}
         />
+
+        {/* Extras / Others */}
+        <ExtrasSection
+          items={extras}
+          formatDate={formatDate}
+          onDelete={deleteExtra}
+        />
       </ScrollView>
 
       {/* Flipbook Modal */}
@@ -710,6 +744,99 @@ function PlaceCard({
           <Text style={styles.textBlockContent}>{item.review}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+const EXTRA_TYPE_LABELS = {
+  insurance: "Travel Insurance",
+  rental_car: "Car Rental",
+  esim: "eSIM",
+  parking: "Parking",
+  tour: "Tour",
+  transfer: "Transfer",
+  visa: "Visa",
+  flight: "Flight",
+  other: "Other",
+};
+
+function ExtrasSection({ items, formatDate, onDelete }) {
+  if (items.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Others</Text>
+      {items.map((item) => (
+        <ExtraCard
+          key={item.id}
+          item={item}
+          formatDate={formatDate}
+          onDelete={() => onDelete(item.id)}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ExtraCard({ item, formatDate, onDelete }) {
+  const typeLabel =
+    EXTRA_TYPE_LABELS[item.extraType] ||
+    (item.extraType
+      ? item.extraType.charAt(0).toUpperCase() + item.extraType.slice(1)
+      : "Other");
+
+  const dateStr = item.startDate
+    ? item.endDate && item.endDate !== item.startDate
+      ? `${formatDate(item.startDate)} → ${formatDate(item.endDate)}`
+      : formatDate(item.startDate)
+    : null;
+
+  const locationStr = [item.city, item.state, item.country]
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <View style={styles.placeCard}>
+      <View style={styles.placeHeader}>
+        <View style={{ flex: 1 }}>
+          <View style={styles.extraTypeBadge}>
+            <Text style={styles.extraTypeBadgeText}>{typeLabel}</Text>
+          </View>
+          <Text style={styles.placeName}>{item.name}</Text>
+          {item.provider ? (
+            <Text style={styles.placeSubtitle}>{item.provider}</Text>
+          ) : null}
+        </View>
+        <TouchableOpacity onPress={onDelete}>
+          <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      {dateStr ? (
+        <Text style={styles.placeDetail}>📅 {dateStr}</Text>
+      ) : null}
+      {locationStr ? (
+        <Text style={styles.placeDetail}>📍 {locationStr}</Text>
+      ) : null}
+      {item.confirmationNumber ? (
+        <Text style={styles.placeDetail}>🔖 Confirmation: {item.confirmationNumber}</Text>
+      ) : null}
+      {item.amount ? (
+        <Text style={styles.placeDetail}>💳 {item.amount}</Text>
+      ) : null}
+      {item.websiteUrl ? (
+        <TouchableOpacity onPress={() => Linking.openURL(item.websiteUrl)}>
+          <Text style={styles.placeDetailLink} numberOfLines={1}>
+            Website: {item.websiteUrl}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+      {item.notes ? (
+        <View style={styles.textBlock}>
+          <Text style={styles.textBlockLabel}>Notes:</Text>
+          <Text style={styles.textBlockContent}>{item.notes}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1109,6 +1236,19 @@ const styles = StyleSheet.create({
   },
   starEmpty: {
     color: "#D1D5DB",
+  },
+  extraTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 999,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    marginBottom: SPACING.xs,
+  },
+  extraTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
   },
   textBlock: {
     marginTop: SPACING.sm,

@@ -15,6 +15,7 @@ import { deleteUser } from "firebase/auth";
 import { db } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
 import Protected from "../components/Protected";
+import FeedbackModal from "../components/modals/FeedbackModal";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 export default function ProfileScreen({ navigation }) {
@@ -31,6 +32,7 @@ function ProfileInner({ navigation }) {
   const [username, setUsername] = useState(profile?.username || "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
   async function handleSave() {
     if (!username.trim()) {
@@ -256,6 +258,22 @@ function ProfileInner({ navigation }) {
           <Text style={styles.linkButtonText}>FAQs</Text>
           <Text style={styles.linkArrow}>›</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.linkButton}
+          onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}
+        >
+          <Text style={styles.linkButtonText}>Help & Support</Text>
+          <Text style={styles.linkArrow}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.linkButton, styles.linkButtonLast]}
+          onPress={() => setFeedbackVisible(true)}
+        >
+          <Text style={styles.linkButtonText}>Send Feedback</Text>
+          <Text style={styles.linkArrow}>›</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Sign Out */}
@@ -277,6 +295,11 @@ function ProfileInner({ navigation }) {
       </TouchableOpacity>
 
       <Text style={styles.versionText}>Ten Miles Ahead v1.0.0</Text>
+
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -473,6 +496,9 @@ const styles = StyleSheet.create({
   linkArrow: {
     fontSize: scaleFontSize(20),
     color: COLORS.muted,
+  },
+  linkButtonLast: {
+    borderBottomWidth: 0,
   },
   signOutButton: {
     backgroundColor: COLORS.error,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,18 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
+import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing, GOOGLE_OAUTH_CONFIG } from "../lib/constants";
+import * as Google from "expo-auth-session/providers/google";
+import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
+
+const EXPO_REDIRECT_URI = "https://auth.expo.io/@almunna/ten-miles-ahead";
+// Dev-only client secret for Expo Go testing (move to server for production)
+const GOOGLE_CLIENT_SECRET = "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";
 
 export default function SigninScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -21,11 +30,64 @@ export default function SigninScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+
+  // Google OAuth
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_OAUTH_CONFIG.webClientId,
+    iosClientId: GOOGLE_OAUTH_CONFIG.iosClientId,
+    androidClientId: GOOGLE_OAUTH_CONFIG.androidClientId,
+    redirectUri: EXPO_REDIRECT_URI,
+  });
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      handleGoogleResponse(response);
+    } else if (response?.type === "error") {
+      setGoogleLoading(false);
+      setError("Google sign in failed. Please try again.");
+    }
+  }, [response]);
+
+  async function handleGoogleResponse(authResponse) {
+    try {
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: GOOGLE_OAUTH_CONFIG.webClientId,
+          clientSecret: GOOGLE_CLIENT_SECRET,
+          code: authResponse.params.code,
+          redirectUri: EXPO_REDIRECT_URI,
+          codeVerifier: request?.codeVerifier,
+        },
+        { tokenEndpoint: "https://oauth2.googleapis.com/token" }
+      );
+      const credential = GoogleAuthProvider.credential(
+        tokenResult.idToken,
+        tokenResult.accessToken
+      );
+      await signInWithCredential(auth, credential);
+      // Navigation handled by auth state change in AuthProvider
+    } catch (err) {
+      let message = "Google sign in failed. Please try again.";
+      if (err.code === "auth/account-exists-with-different-credential") {
+        message = "An account already exists with the same email. Sign in with email & password.";
+      }
+      setError(message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setGoogleLoading(true);
+    await promptAsync();
+  }
 
   async function handleSignIn() {
     if (!email || !password) {
@@ -145,6 +207,25 @@ export default function SigninScreen({ navigation }) {
           >
             <Text style={styles.buttonText}>
               {loading ? "Signing in..." : "Sign In"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google Sign-In Button */}
+          <TouchableOpacity
+            style={[styles.googleButton, (googleLoading || !request) && styles.buttonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading || !request}
+          >
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.googleButtonText}>
+              {googleLoading ? "Signing in with Google..." : "Continue with Google"}
             </Text>
           </TouchableOpacity>
 
@@ -358,6 +439,42 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   cancelButtonText: {
+    color: COLORS.foreground,
+    fontSize: scaleFontSize(16),
+    fontWeight: "600",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: scaleSpacing(SPACING.md),
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    color: COLORS.muted,
+    fontSize: scaleFontSize(13),
+    marginHorizontal: scaleSpacing(SPACING.sm),
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: scaleSpacing(SPACING.md),
+    borderRadius: scaleFontSize(8),
+    gap: scaleSpacing(SPACING.sm),
+  },
+  googleIcon: {
+    fontSize: scaleFontSize(18),
+    fontWeight: "700",
+    color: "#4285F4",
+  },
+  googleButtonText: {
     color: COLORS.foreground,
     fontSize: scaleFontSize(16),
     fontWeight: "600",

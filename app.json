@@ -2,6 +2,7 @@
   "expo": {
     "name": "Ten Miles Ahead",
     "slug": "ten-miles-ahead",
+    "scheme": "tenmilesahead",
     "version": "1.7.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#2a3544"
+      "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -29,7 +30,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#2a3544"
+        "backgroundColor": "#ffffff"
       },
       "package": "com.tenmilesahead.app",
       "versionCode": 6,
@@ -60,7 +61,8 @@
           "enableGooglePay": true
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

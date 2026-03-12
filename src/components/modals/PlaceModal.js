@@ -1026,14 +1026,16 @@ export default function PlaceModal({
             </ScrollView>
           ) : (
             <>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddForm(true)}
-              >
-                <Text style={styles.addButtonText}>
-                  + Add {title.slice(0, -1)}
-                </Text>
-              </TouchableOpacity>
+              {subcollection !== "extras" && (
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setShowAddForm(true)}
+                >
+                  <Text style={styles.addButtonText}>
+                    + Add {title.slice(0, -1)}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {items.length === 0 ? (
                 <View style={styles.emptyContainer}>

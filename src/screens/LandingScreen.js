@@ -16,6 +16,7 @@ import {
   scaleFontSize,
   scaleSpacing,
 } from "../lib/constants";
+import FeedbackModal from "../components/modals/FeedbackModal";
 
 // FAQs data
 const faqs = [
@@ -200,6 +201,7 @@ function FAQItem({ question, answer }) {
 
 export default function LandingScreen() {
   const navigation = useNavigation();
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
   const handleStartJourney = () => {
     navigation.navigate(SCREENS.SIGNIN);
@@ -355,6 +357,14 @@ export default function LandingScreen() {
               >
                 <Text style={styles.linkText}>View All FAQs</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}
+              >
+                <Text style={styles.linkText}>Help & Support</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setFeedbackVisible(true)}>
+                <Text style={styles.linkText}>Feedback</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -385,8 +395,69 @@ export default function LandingScreen() {
         </Text>
       </View>
 
-      {/* Bottom Spacing */}
-      <View style={styles.bottomSpacer} />
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerBrandRow}>
+          <View style={styles.footerLogoWrapper}>
+            <Image
+              source={require("../../assets/logo.png")}
+              style={styles.footerLogoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.footerBrandText}>Ten Miles Ahead</Text>
+        </View>
+        <Text style={styles.footerDescription}>
+          Travel journals, photo flipbooks, and shared adventures.
+        </Text>
+
+        {/* Three-column Links */}
+        <View style={styles.footerSectionsRow}>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerSectionTitle}>Explore</Text>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.FAQS)}>
+              <Text style={styles.footerLink}>FAQs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TUTORIALS)}>
+              <Text style={styles.footerLink}>Tutorials</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.SIGNUP)}>
+              <Text style={styles.footerLink}>Subscribe</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footerCol}>
+            <Text style={styles.footerSectionTitle}>Support</Text>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}>
+              <Text style={styles.footerLink}>Help & Support</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setFeedbackVisible(true)}>
+              <Text style={styles.footerLink}>Feedback</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footerCol}>
+            <Text style={styles.footerSectionTitle}>Legal</Text>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.PRIVACY)}>
+              <Text style={styles.footerLink}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TERMS)}>
+              <Text style={styles.footerLink}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.footerBottom}>
+          <Text style={styles.footerCopyright}>
+            © {new Date().getFullYear()} Ten Miles Ahead. All rights reserved.
+          </Text>
+        </View>
+      </View>
+
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -774,7 +845,9 @@ const styles = StyleSheet.create({
   },
   faqContactButtons: {
     flexDirection: "row",
-    gap: scaleSpacing(SPACING.lg),
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: scaleSpacing(SPACING.md),
     marginTop: scaleSpacing(SPACING.md),
   },
   linkText: {
@@ -811,7 +884,71 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     marginTop: scaleSpacing(SPACING.md),
   },
-  bottomSpacer: {
-    height: scaleSpacing(SPACING.xxl),
+  footer: {
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingHorizontal: scaleSpacing(SPACING.lg),
+    paddingVertical: scaleSpacing(SPACING.xl),
+  },
+  footerBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: scaleSpacing(SPACING.sm),
+    marginBottom: scaleSpacing(SPACING.xs),
+  },
+  footerLogoWrapper: {
+    width: scaleFontSize(32),
+    height: scaleFontSize(32),
+    borderRadius: scaleFontSize(8),
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 3,
+  },
+  footerLogoImage: {
+    width: scaleFontSize(24),
+    height: scaleFontSize(24),
+  },
+  footerBrandText: {
+    fontSize: scaleFontSize(15),
+    fontWeight: "700",
+    color: COLORS.foreground,
+  },
+  footerDescription: {
+    fontSize: scaleFontSize(12),
+    color: COLORS.muted,
+    marginBottom: scaleSpacing(SPACING.lg),
+  },
+  footerSectionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: scaleSpacing(SPACING.sm),
+  },
+  footerCol: {
+    flex: 1,
+  },
+  footerSectionTitle: {
+    fontSize: scaleFontSize(13),
+    fontWeight: "600",
+    color: COLORS.foreground,
+    marginBottom: scaleSpacing(SPACING.sm),
+  },
+  footerLink: {
+    fontSize: scaleFontSize(12),
+    color: COLORS.primary,
+    paddingVertical: scaleSpacing(SPACING.xs),
+  },
+  footerBottom: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: scaleSpacing(SPACING.md),
+    marginTop: scaleSpacing(SPACING.sm),
+  },
+  footerCopyright: {
+    fontSize: scaleFontSize(11),
+    color: COLORS.muted,
+    textAlign: "center",
   },
 });

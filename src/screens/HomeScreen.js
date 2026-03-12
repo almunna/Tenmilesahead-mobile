@@ -36,6 +36,7 @@ import ItineraryModal from "../components/modals/ItineraryModal";
 import PlaceModal from "../components/modals/PlaceModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
 import AddTripModal from "../components/modals/AddTripModal";
+import FeedbackModal from "../components/modals/FeedbackModal";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 import { dateRangeOf, formatDateMMDDYYYY } from "../lib/utils";
 import { calculateDistance } from "../lib/geocoding";
@@ -140,6 +141,7 @@ export default function HomeScreen() {
   const [trips, setTrips] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [upcomingTrips, setUpcomingTrips] = useState([]);
+  const [pendingBookingsCount, setPendingBookingsCount] = useState(0);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFromPicker, setShowFromPicker] = useState(false);
@@ -167,9 +169,12 @@ export default function HomeScreen() {
   const [activitiesTrip, setActivitiesTrip] = useState(null);
   const [accommodationsTrip, setAccommodationsTrip] = useState(null);
   const [restaurantsTrip, setRestaurantsTrip] = useState(null);
+  const [cruisesTrip, setCruisesTrip] = useState(null);
+  const [othersTrip, setOthersTrip] = useState(null);
   const [deleteTrip, setDeleteTrip] = useState(null);
   const [showMenu, setShowMenu] = useState(null);
   const [showAddTrip, setShowAddTrip] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
   // Check subscription (must have valid status AND not expired)
   const subscription = profile?.subscription;
@@ -232,6 +237,19 @@ export default function HomeScreen() {
       () => setTrips([])
     );
 
+    return () => unsub();
+  }, [user]);
+
+  // Listen to pending bookings count
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, "users", user.uid, "pendingBookings"),
+      where("status", "==", "pending")
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setPendingBookingsCount(snap.size);
+    }, () => {});
     return () => unsub();
   }, [user]);
 
@@ -598,6 +616,29 @@ export default function HomeScreen() {
         </Text>
       </View>
 
+      {/* Pending Bookings Banner */}
+      {pendingBookingsCount > 0 && (
+        <TouchableOpacity
+          style={styles.pendingBookingsBanner}
+          onPress={() => navigation.navigate(SCREENS.BOOKINGS)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.pendingBookingsBannerLeft}>
+            <Text style={styles.pendingBookingsIcon}>🕐</Text>
+            <View>
+              <Text style={styles.pendingBookingsTitle}>
+                {pendingBookingsCount} Pending{" "}
+                {pendingBookingsCount === 1 ? "Booking" : "Bookings"}
+              </Text>
+              <Text style={styles.pendingBookingsSubtitle}>
+                Tap to assign {pendingBookingsCount === 1 ? "it" : "them"} to a trip
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.pendingBookingsArrow}>→</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Upcoming Trips */}
       {upcomingTrips.length > 0 && (
         <View style={styles.upcomingSection}>
@@ -718,23 +759,44 @@ export default function HomeScreen() {
       {/* Travel Overview Stats */}
       <TravelOverview stats={stats} />
 
+      {/* My Badges */}
+      <TouchableOpacity
+        style={styles.badgesCard}
+        onPress={() => navigation.navigate(SCREENS.BADGES, { stats })}
+        activeOpacity={0.85}
+      >
+        <View style={styles.badgesCardLeft}>
+          <Text style={styles.badgesCardTitle}>My Badges</Text>
+          <Text style={styles.badgesCardSubtitle}>
+            Earn badges as you explore the world
+          </Text>
+        </View>
+        <View style={styles.badgesCardRight}>
+          <Text style={styles.badgesCardIcon}>🏆</Text>
+          <Text style={styles.badgesCardArrow}>View All →</Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Footer */}
       <View style={styles.footer}>
         {/* Branding Section */}
-        <View style={styles.footerSection}>
-          <View style={styles.footerBrandRow}>
-            <View style={styles.footerLogo} />
-            <Text style={styles.footerBrandText}>Ten Miles Ahead</Text>
+        <View style={styles.footerBrandRow}>
+          <View style={styles.footerLogoWrapper}>
+            <Image
+              source={require("../../assets/logo.png")}
+              style={styles.footerLogoImage}
+              resizeMode="contain"
+            />
           </View>
-          <Text style={styles.footerDescription}>
-            Travel journals, photo flipbooks, and shared adventures.
-          </Text>
+          <Text style={styles.footerBrandText}>Ten Miles Ahead</Text>
         </View>
+        <Text style={styles.footerDescription}>
+          Travel journals, photo flipbooks, and shared adventures.
+        </Text>
 
-        {/* Sections Row */}
+        {/* Three-column Links */}
         <View style={styles.footerSectionsRow}>
-          {/* Explore Section */}
-          <View style={styles.footerSection}>
+          <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Explore</Text>
             <TouchableOpacity onPress={() => navigation.navigate(SCREENS.FAQS)}>
               <Text style={styles.footerLink}>FAQs</Text>
@@ -747,8 +809,17 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Legal Section */}
-          <View style={styles.footerSection}>
+          <View style={styles.footerCol}>
+            <Text style={styles.footerSectionTitle}>Support</Text>
+            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}>
+              <Text style={styles.footerLink}>Help & Support</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setFeedbackVisible(true)}>
+              <Text style={styles.footerLink}>Feedback</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Legal</Text>
             <TouchableOpacity onPress={() => navigation.navigate(SCREENS.PRIVACY)}>
               <Text style={styles.footerLink}>Privacy Policy</Text>
@@ -837,6 +908,26 @@ export default function HomeScreen() {
         />
       )}
 
+      {cruisesTrip && (
+        <PlaceModal
+          title="Cruises"
+          tripId={cruisesTrip.id}
+          subcollection="cruises"
+          visible={true}
+          onClose={() => setCruisesTrip(null)}
+        />
+      )}
+
+      {othersTrip && (
+        <PlaceModal
+          title="Others"
+          tripId={othersTrip.id}
+          subcollection="extras"
+          visible={true}
+          onClose={() => setOthersTrip(null)}
+        />
+      )}
+
       {deleteTrip && (
         <ConfirmModal
           isOpen={true}
@@ -861,6 +952,11 @@ export default function HomeScreen() {
         />
       )}
 
+      <FeedbackModal
+        visible={feedbackVisible}
+        onClose={() => setFeedbackVisible(false)}
+      />
+
       {showMenu && (
         <Modal visible transparent animationType="fade">
           <TouchableOpacity
@@ -876,34 +972,12 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
-                  setPhotosTrip(showMenu);
+                  setAccommodationsTrip(showMenu);
                   setShowMenu(null);
                 }}
               >
-                <Text style={styles.menuIcon}>📷</Text>
-                <Text style={styles.menuText}>Photos</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setItineraryTrip(showMenu);
-                  setShowMenu(null);
-                }}
-              >
-                <Text style={styles.menuIcon}>📋</Text>
-                <Text style={styles.menuText}>Itinerary</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setDestinationsTrip(showMenu);
-                  setShowMenu(null);
-                }}
-              >
-                <Text style={styles.menuIcon}>📍</Text>
-                <Text style={styles.menuText}>Destinations</Text>
+                <Text style={styles.menuIcon}>🏨</Text>
+                <Text style={styles.menuText}>Accommodations</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -920,12 +994,45 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => {
-                  setAccommodationsTrip(showMenu);
+                  setCruisesTrip(showMenu);
                   setShowMenu(null);
                 }}
               >
-                <Text style={styles.menuIcon}>🏨</Text>
-                <Text style={styles.menuText}>Accommodations</Text>
+                <Text style={styles.menuIcon}>🚢</Text>
+                <Text style={styles.menuText}>Cruises</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setDestinationsTrip(showMenu);
+                  setShowMenu(null);
+                }}
+              >
+                <Text style={styles.menuIcon}>📍</Text>
+                <Text style={styles.menuText}>Destinations</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setItineraryTrip(showMenu);
+                  setShowMenu(null);
+                }}
+              >
+                <Text style={styles.menuIcon}>🗓️</Text>
+                <Text style={styles.menuText}>Itinerary</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setPhotosTrip(showMenu);
+                  setShowMenu(null);
+                }}
+              >
+                <Text style={styles.menuIcon}>📷</Text>
+                <Text style={styles.menuText}>Photos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -937,6 +1044,17 @@ export default function HomeScreen() {
               >
                 <Text style={styles.menuIcon}>🍽️</Text>
                 <Text style={styles.menuText}>Restaurants</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setOthersTrip(showMenu);
+                  setShowMenu(null);
+                }}
+              >
+                <Text style={styles.menuIcon}>🧳</Text>
+                <Text style={styles.menuText}>Others</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1076,6 +1194,41 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: COLORS.white,
     textAlign: "center",
+  },
+  pendingBookingsBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: scaleSpacing(SPACING.md),
+    marginBottom: scaleSpacing(SPACING.md),
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.warning,
+  },
+  pendingBookingsBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: scaleSpacing(SPACING.sm),
+    flex: 1,
+  },
+  pendingBookingsIcon: {
+    fontSize: scaleFontSize(24),
+  },
+  pendingBookingsTitle: {
+    fontSize: scaleFontSize(14),
+    fontWeight: "700",
+    color: COLORS.foreground,
+  },
+  pendingBookingsSubtitle: {
+    fontSize: scaleFontSize(12),
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+  pendingBookingsArrow: {
+    fontSize: scaleFontSize(18),
+    color: COLORS.primary,
+    fontWeight: "700",
   },
   upcomingSection: {
     marginBottom: scaleSpacing(SPACING.lg),
@@ -1293,22 +1446,24 @@ const styles = StyleSheet.create({
   footerSection: {
     marginBottom: scaleSpacing(SPACING.lg),
   },
-  footerSectionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: scaleSpacing(SPACING.xl),
-  },
   footerBrandRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: scaleSpacing(SPACING.sm),
     marginBottom: scaleSpacing(SPACING.sm),
   },
-  footerLogo: {
+  footerLogoWrapper: {
     width: scaleFontSize(32),
     height: scaleFontSize(32),
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
+    borderRadius: scaleFontSize(8),
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 3,
+  },
+  footerLogoImage: {
+    width: scaleFontSize(24),
+    height: scaleFontSize(24),
   },
   footerBrandText: {
     fontSize: scaleFontSize(16),
@@ -1319,6 +1474,18 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(12),
     color: COLORS.muted,
     lineHeight: scaleFontSize(18),
+    marginBottom: scaleSpacing(SPACING.lg),
+  },
+  footerSectionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  footerCol: {
+    flex: 1,
+  },
+  footerSection: {
+    marginBottom: scaleSpacing(SPACING.lg),
   },
   footerSectionTitle: {
     fontSize: scaleFontSize(14),
@@ -1336,10 +1503,48 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     paddingTop: scaleSpacing(SPACING.md),
     marginTop: scaleSpacing(SPACING.md),
+    width: "100%",
   },
   footerCopyright: {
     fontSize: scaleFontSize(10),
     color: COLORS.muted,
     textAlign: "center",
+  },
+  badgesCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: scaleSpacing(SPACING.lg),
+    marginBottom: scaleSpacing(SPACING.lg),
+  },
+  badgesCardLeft: {
+    flex: 1,
+  },
+  badgesCardTitle: {
+    fontSize: scaleFontSize(18),
+    fontWeight: "700",
+    color: COLORS.foreground,
+    marginBottom: scaleSpacing(SPACING.xs),
+  },
+  badgesCardSubtitle: {
+    fontSize: scaleFontSize(13),
+    color: COLORS.muted,
+  },
+  badgesCardRight: {
+    alignItems: "center",
+    marginLeft: scaleSpacing(SPACING.md),
+  },
+  badgesCardIcon: {
+    fontSize: scaleFontSize(32),
+    marginBottom: scaleSpacing(SPACING.xs),
+  },
+  badgesCardArrow: {
+    fontSize: scaleFontSize(12),
+    color: COLORS.primary,
+    fontWeight: "600",
   },
 });
