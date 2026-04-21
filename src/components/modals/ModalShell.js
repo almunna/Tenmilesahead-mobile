@@ -96,6 +96,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     width: "100%",
+    minHeight: "40%",
     maxHeight: "90%",
     overflow: "hidden",
     borderWidth: 1,

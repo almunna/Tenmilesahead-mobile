@@ -31,7 +31,7 @@ import {
 import { db, storage } from "../../lib/firebase";
 import { useAuth } from "../AuthProvider";
 import ModalShell from "./ModalShell";
-import { COLORS, SPACING } from "../../lib/constants";
+import { COLORS, SPACING, API_BASE_URL } from "../../lib/constants";
 
 export default function PhotosModal({ tripId, visible, onClose }) {
   const { user } = useAuth();
@@ -89,7 +89,7 @@ export default function PhotosModal({ tripId, visible, onClose }) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      quality: 0.8,
+      quality: 1,
     });
 
     if (!result.canceled && result.assets) {
@@ -106,6 +106,7 @@ export default function PhotosModal({ tripId, visible, onClose }) {
         ? tripSnap.data()?.coverMediaId
         : null;
 
+      const idToken = await user.getIdToken();
       let firstImageMediaId = null;
 
       for (const asset of assets) {
@@ -115,34 +116,51 @@ export default function PhotosModal({ tripId, visible, onClose }) {
         const kind = isImage ? "image" : isVideo ? "video" : "other";
         if (kind === "other") continue;
 
-        // Fetch the file as a blob
-        const response = await fetch(uri);
-        const blob = await response.blob();
-
         const mediaRef = doc(collection(db, "trips", tripId, "media"));
         const mediaId = mediaRef.id;
 
-        const safeName = (fileName || `photo_${Date.now()}`).replace(
-          /[^\w.\-]+/g,
-          "_"
-        );
-        const path = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
-        const sref = storageRef(storage, path);
+        let downloadURL = "";
+        let storagePath = "";
 
-        await uploadBytes(sref, blob);
-        const url = await getDownloadURL(sref);
+        if (isImage) {
+          const formData = new FormData();
+          formData.append("file", {
+            uri,
+            name: fileName || `photo_${Date.now()}.jpg`,
+            type: asset.mimeType || "image/jpeg",
+          });
+          formData.append("ownerId", user.uid);
+          formData.append("tripId", tripId);
+          formData.append("idToken", idToken);
+          const res = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error ?? `Upload failed (${res.status})`);
+          }
+          ({ downloadURL, storagePath } = await res.json());
+        } else {
+          // Video: direct Firebase Storage upload
+          const safeName = (fileName || `video_${Date.now()}`).replace(/[^\w.\-]+/g, "_");
+          storagePath = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
+          const sref = storageRef(storage, storagePath);
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          await uploadBytes(sref, blob);
+          downloadURL = await getDownloadURL(sref);
+        }
 
         await setDoc(mediaRef, {
-          tripId: tripId,
+          tripId,
+          ownerId: user.uid,
           type: kind,
-          storagePath: path,
-          downloadURL: url,
+          storagePath,
+          downloadURL,
           createdAt: Date.now(),
-          takenAt: Date.now(),
+          takenAt: asset.modificationTime || Date.now(),
           caption: "",
-          fileName: safeName,
-          size: blob.size,
-          contentType: blob.type,
         });
 
         if (isImage && !firstImageMediaId) {

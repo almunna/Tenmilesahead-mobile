@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -48,11 +48,11 @@ import { Ionicons } from "@expo/vector-icons";
 
 const REVIEW_TYPES = [
   "All Types",
-  "Destinations",
-  "Activities",
   "Accommodations",
-  "Restaurants",
+  "Activities",
   "Cruises",
+  "Destinations",
+  "Restaurants",
 ];
 
 function formatDateString(dateStr) {
@@ -96,10 +96,12 @@ function GlobalReviewsInner({ navigation }) {
 
   const REVIEWS_PER_LOAD = 10;
   const [allReviews, setAllReviews] = useState([]);
+  const [allCities, setAllCities] = useState([]);
   const [tripDocs, setTripDocs] = useState([]);
   const [loadedTripCount, setLoadedTripCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [streamingReviews, setStreamingReviews] = useState(false);
   const [selectedType, setSelectedType] = useState("All Types");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -107,6 +109,22 @@ function GlobalReviewsInner({ navigation }) {
   const [selectedReview, setSelectedReview] = useState(null);
   const [editingReview, setEditingReview] = useState(null);
   const [addingReviewForPlace, setAddingReviewForPlace] = useState(null);
+
+  // Maps normalizedKey → array of raw city strings (e.g. "st augustine" → ["St Augustine","St. Augustine"])
+  const cityVariantsMap = useRef(new Map());
+
+  // Refs so the onScroll handler always reads current values (avoids stale closure)
+  const tripDocsRef = useRef([]);
+  const loadedTripCountRef = useRef(0);
+  const allReviewsRef = useRef([]);
+  const loadingMoreRef = useRef(false);
+  const streamingReviewsRef = useRef(false);
+
+  useEffect(() => { tripDocsRef.current = tripDocs; }, [tripDocs]);
+  useEffect(() => { loadedTripCountRef.current = loadedTripCount; }, [loadedTripCount]);
+  useEffect(() => { allReviewsRef.current = allReviews; }, [allReviews]);
+  useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
+  useEffect(() => { streamingReviewsRef.current = streamingReviews; }, [streamingReviews]);
 
   useEffect(() => {
     loadTrips();
@@ -121,10 +139,162 @@ function GlobalReviewsInner({ navigation }) {
         ownerId: tripDoc.data().ownerId || "",
       }));
       setTripDocs(trips);
+      // Turn off full-screen spinner now — reviews will stream in as they load
+      setLoading(false);
       if (trips.length > 0) {
-        await loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0);
+        // Load cities across ALL trips in parallel with review streaming
+        setStreamingReviews(true);
+        await Promise.all([
+          loadAllCities(trips),
+          loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0),
+        ]);
+        setStreamingReviews(false);
       }
     } catch (error) {
+      setLoading(false);
+      setStreamingReviews(false);
+    }
+  };
+
+  // Group reviews by unique place (same as web's groupReviewsByPlace)
+  // Returns a Map of groupKey → first city seen for that place
+  const groupReviewsByPlace = (reviews) => {
+    const grouped = new Map();
+    reviews.forEach((review) => {
+      const key = review.type === "Cruises"
+        ? `${review.placeName}|${review.cruiseLine || ""}|${review.shipName || ""}|${review.country}|${review.type}`
+        : `${review.placeName}|${review.city}|${review.country}|${review.type}`;
+      if (!grouped.has(key)) grouped.set(key, review.city);
+    });
+    return grouped;
+  };
+
+  // Normalize a city name to a dedup key:
+  // - trim + Unicode NFC
+  // - remove periods ("St." → "St")
+  // - collapse whitespace
+  // - expand "Saint" → "St" so "Glen Saint Mary" === "Glen St Mary"
+  // - lowercase
+  const normalizeCityKey = (city) =>
+    city
+      .trim()
+      .normalize("NFC")
+      .replace(/\./g, "")
+      .replace(/\bsaint\b/gi, "st")
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+
+  const loadAllCities = async (trips) => {
+    try {
+      const subcollections = ["destinations", "activities", "accommodations", "restaurants", "cruises"];
+      const seen = new Map();     // normalizedKey → display value (first seen wins)
+      const variants = new Map(); // normalizedKey → Set of raw city strings
+      await Promise.all(
+        trips.flatMap((trip) =>
+          subcollections.map(async (sub) => {
+            try {
+              const snap = await getDocs(collection(db, "trips", trip.id, sub));
+              snap.docs.forEach((d) => {
+                const city = d.data().city?.trim().normalize("NFC");
+                if (city) {
+                  const key = normalizeCityKey(city);
+                  if (!seen.has(key)) seen.set(key, city);
+                  if (!variants.has(key)) variants.set(key, new Set());
+                  variants.get(key).add(city);
+                }
+              });
+            } catch (e) {}
+          })
+        )
+      );
+      cityVariantsMap.current = variants;
+      setAllCities(
+        Array.from(seen.values()).sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        )
+      );
+    } catch (e) {}
+  };
+
+  // Same as web: when a specific location is selected, query Firestore directly
+  // for all reviews in that city across all trips (not limited to loaded batch)
+  const loadReviewsByLocation = async (location) => {
+    if (location === "All Locations") {
+      // Reset to paginated streaming mode
+      await loadReviews();
+      return;
+    }
+    try {
+      setLoading(true);
+      setAllReviews([]);
+      setLoadedTripCount(0);
+      const tripsSnapshot = await getDocs(collection(db, "trips"));
+      const trips = tripsSnapshot.docs.map((d) => ({ id: d.id, ownerId: d.data().ownerId || "" }));
+      setTripDocs(trips);
+
+      const subcollections = [
+        { name: "destinations", type: "Destinations" },
+        { name: "activities", type: "Activities" },
+        { name: "accommodations", type: "Accommodations" },
+        { name: "restaurants", type: "Restaurants" },
+        { name: "cruises", type: "Cruises" },
+      ];
+
+      // Get all raw city variants for this normalized location key
+      const key = normalizeCityKey(location);
+      const rawVariants = Array.from(cityVariantsMap.current.get(key) || [location]);
+
+      // Query all trips × subcollections × city variants in parallel
+      const allPromises = trips.flatMap((trip) =>
+        subcollections.flatMap(({ name, type }) =>
+          rawVariants.map((rawCity) =>
+            getDocs(
+              query(
+                collection(db, "trips", trip.id, name),
+                where("city", "==", rawCity),
+                orderBy("createdAt", "desc"),
+              )
+            ).then(async (snap) => {
+              if (snap.empty) return [];
+              const [userDoc, ...mediaResults] = await Promise.all([
+                trip.ownerId ? getDoc(doc(db, "users", trip.ownerId)).catch(() => null) : Promise.resolve(null),
+                ...snap.docs.map((reviewDoc) =>
+                  getDocs(query(
+                    collection(db, "trips", trip.id, "media"),
+                    where("linkedSubcollection", "==", name),
+                    where("linkedId", "==", reviewDoc.id),
+                  ))
+                ),
+              ]);
+              const ownerUsername = userDoc?.exists?.() ? userDoc.data().username : undefined;
+              return snap.docs.map((reviewDoc, i) => {
+                const data = reviewDoc.data();
+                const mediaItems = mediaResults[i].docs.map((m) => ({ id: m.id, ...m.data() }));
+                const ratingValues = [data.qualityRating, data.valueRating, data.serviceRating, data.locationRating].filter(Boolean);
+                const overallRating = ratingValues.length > 0 ? ratingValues.reduce((s, r) => s + r, 0) / ratingValues.length : 0;
+                return {
+                  id: reviewDoc.id, tripId: trip.id, ownerId: trip.ownerId, ownerUsername, type,
+                  placeName: data.name || "Unnamed Place",
+                  city: data.city || "", state: data.state || null, country: data.country || "",
+                  address: data.address || null, phone: data.phoneNumber || null,
+                  websiteUrl: data.websiteUrl || null, notes: data.review || data.notes || null,
+                  visitDate: data.startDate || null, createdAt: data.createdAt || Date.now(),
+                  mediaItems, overallRating,
+                  qualityRating: data.qualityRating || 0, serviceRating: data.serviceRating || 0,
+                  valueRating: data.valueRating || 0, locationRating: data.locationRating || 0,
+                  cruiseLine: data.cruiseLine || undefined, shipName: data.shipName || undefined,
+                };
+              });
+            }).catch(() => [])
+          )
+        )
+      );
+
+      const results = await Promise.all(allPromises);
+      const reviews = results.flat().sort((a, b) => b.createdAt - a.createdAt);
+      setAllReviews(reviews);
+      setLoadedTripCount(trips.length); // all trips loaded for this location
+    } catch (e) {
     } finally {
       setLoading(false);
     }
@@ -135,23 +305,20 @@ function GlobalReviewsInner({ navigation }) {
     let tripIndex = startTripIndex;
     while (currentReviews.length < targetCount && tripIndex < trips.length) {
       const newReviews = await loadReviewsFromSingleTrip(trips[tripIndex]);
-      currentReviews = [...currentReviews, ...newReviews];
       tripIndex++;
+      if (newReviews.length > 0) {
+        currentReviews = [...currentReviews, ...newReviews];
+        // Stream: update UI after each trip so first results appear immediately
+        const sorted = [...currentReviews].sort((a, b) => b.createdAt - a.createdAt);
+        setAllReviews(sorted);
+        setLoadedTripCount(tripIndex);
+      }
     }
-    currentReviews.sort((a, b) => b.createdAt - a.createdAt);
-    setAllReviews(currentReviews);
     setLoadedTripCount(tripIndex);
     return currentReviews;
   };
 
   const loadReviewsFromSingleTrip = async (trip) => {
-    let ownerUsername;
-    if (trip.ownerId) {
-      try {
-        const userDoc = await getDoc(doc(db, "users", trip.ownerId));
-        if (userDoc.exists()) ownerUsername = userDoc.data().username;
-      } catch (e) {}
-    }
     const subcollections = [
       { name: "destinations", type: "Destinations" },
       { name: "activities", type: "Activities" },
@@ -159,12 +326,18 @@ function GlobalReviewsInner({ navigation }) {
       { name: "restaurants", type: "Restaurants" },
       { name: "cruises", type: "Cruises" },
     ];
-    const results = await Promise.all(
-      subcollections.map(({ name, type }) =>
-        fetchReviewsFromSubcollection(trip.id, name, type, trip.ownerId, ownerUsername)
-      )
-    );
-    return results.flat();
+    // Fetch user doc AND all subcollections in parallel
+    const [userDoc, ...subResults] = await Promise.all([
+      trip.ownerId
+        ? getDoc(doc(db, "users", trip.ownerId)).catch(() => null)
+        : Promise.resolve(null),
+      ...subcollections.map(({ name, type }) =>
+        fetchReviewsFromSubcollection(trip.id, name, type, trip.ownerId, undefined)
+      ),
+    ]);
+    const ownerUsername = userDoc?.exists?.() ? userDoc.data().username : undefined;
+    // Attach ownerUsername to all reviews from this trip
+    return subResults.flat().map((r) => ({ ...r, ownerUsername }));
   };
 
   const fetchReviewsFromSubcollection = async (tripId, subcollectionName, type, ownerId, ownerUsername) => {
@@ -172,55 +345,56 @@ function GlobalReviewsInner({ navigation }) {
       const snapshot = await getDocs(
         query(collection(db, "trips", tripId, subcollectionName), orderBy("createdAt", "desc"))
       );
-      const reviews = [];
-      for (const reviewDoc of snapshot.docs) {
-        const data = reviewDoc.data();
-        const mediaSnapshot = await getDocs(
-          query(
-            collection(db, "trips", tripId, "media"),
-            where("linkedSubcollection", "==", subcollectionName),
-            where("linkedId", "==", reviewDoc.id),
-          )
-        );
-        const mediaItems = mediaSnapshot.docs.map((mediaDoc) => ({
-          id: mediaDoc.id,
-          ...mediaDoc.data(),
-        }));
-        const calculateOverallRating = () => {
-          const ratings = [];
-          if (data.qualityRating) ratings.push(data.qualityRating);
-          if (data.valueRating) ratings.push(data.valueRating);
-          if (data.serviceRating) ratings.push(data.serviceRating);
-          if (data.locationRating) ratings.push(data.locationRating);
-          if (ratings.length === 0) return 0;
-          return ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
-        };
-        reviews.push({
-          id: reviewDoc.id,
-          tripId,
-          ownerId,
-          ownerUsername,
-          type,
-          placeName: data.name || "Unnamed Place",
-          city: data.city || "",
-          state: data.state || null,
-          country: data.country || "",
-          address: data.address || null,
-          phone: data.phoneNumber || null,
-          websiteUrl: data.websiteUrl || null,
-          notes: data.review || data.notes || null,
-          visitDate: data.startDate || null,
-          createdAt: data.createdAt || Date.now(),
-          mediaItems,
-          overallRating: calculateOverallRating(),
-          qualityRating: data.qualityRating || 0,
-          serviceRating: data.serviceRating || 0,
-          valueRating: data.valueRating || 0,
-          locationRating: data.locationRating || 0,
-          cruiseLine: data.cruiseLine || undefined,
-          shipName: data.shipName || undefined,
-        });
-      }
+      if (snapshot.empty) return [];
+      // Fetch all media for all reviews in this subcollection in parallel
+      const reviews = await Promise.all(
+        snapshot.docs.map(async (reviewDoc) => {
+          const data = reviewDoc.data();
+          const mediaSnapshot = await getDocs(
+            query(
+              collection(db, "trips", tripId, "media"),
+              where("linkedSubcollection", "==", subcollectionName),
+              where("linkedId", "==", reviewDoc.id),
+            )
+          );
+          const mediaItems = mediaSnapshot.docs.map((mediaDoc) => ({
+            id: mediaDoc.id,
+            ...mediaDoc.data(),
+          }));
+          const ratingValues = [
+            data.qualityRating, data.valueRating,
+            data.serviceRating, data.locationRating,
+          ].filter(Boolean);
+          const overallRating = ratingValues.length > 0
+            ? ratingValues.reduce((sum, r) => sum + r, 0) / ratingValues.length
+            : 0;
+          return {
+            id: reviewDoc.id,
+            tripId,
+            ownerId,
+            ownerUsername,
+            type,
+            placeName: data.name || "Unnamed Place",
+            city: data.city || "",
+            state: data.state || null,
+            country: data.country || "",
+            address: data.address || null,
+            phone: data.phoneNumber || null,
+            websiteUrl: data.websiteUrl || null,
+            notes: data.review || data.notes || null,
+            visitDate: data.startDate || null,
+            createdAt: data.createdAt || Date.now(),
+            mediaItems,
+            overallRating,
+            qualityRating: data.qualityRating || 0,
+            serviceRating: data.serviceRating || 0,
+            valueRating: data.valueRating || 0,
+            locationRating: data.locationRating || 0,
+            cruiseLine: data.cruiseLine || undefined,
+            shipName: data.shipName || undefined,
+          };
+        })
+      );
       return reviews;
     } catch (e) {
       return [];
@@ -228,13 +402,22 @@ function GlobalReviewsInner({ navigation }) {
   };
 
   const loadMoreTrips = async () => {
-    if (loadingMore || loadedTripCount >= tripDocs.length) return;
+    // Use refs so this is always reading current values even when called from scroll handler
+    if (loadingMoreRef.current || streamingReviewsRef.current) return;
+    if (loadedTripCountRef.current >= tripDocsRef.current.length) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const targetCount = allReviews.length + REVIEWS_PER_LOAD;
-      await loadReviewsUntilCount(tripDocs, allReviews, targetCount, loadedTripCount);
+      const targetCount = allReviewsRef.current.length + REVIEWS_PER_LOAD;
+      await loadReviewsUntilCount(
+        tripDocsRef.current,
+        allReviewsRef.current,
+        targetCount,
+        loadedTripCountRef.current,
+      );
     } catch (error) {
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
@@ -251,27 +434,30 @@ function GlobalReviewsInner({ navigation }) {
         ownerId: tripDoc.data().ownerId || "",
       }));
       setTripDocs(trips);
+      // Turn off full-screen spinner now — reviews will stream in as they load
+      setLoading(false);
       if (trips.length > 0) {
-        await loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0);
+        setStreamingReviews(true);
+        await Promise.all([
+          loadAllCities(trips),
+          loadReviewsUntilCount(trips, [], REVIEWS_PER_LOAD, 0),
+        ]);
+        setStreamingReviews(false);
       }
     } catch (error) {
-    } finally {
       setLoading(false);
+      setStreamingReviews(false);
     }
   };
 
-  const uniqueLocations = [
-    "All Locations",
-    ...Array.from(
-      new Set(allReviews.map((r) => r.city).filter(Boolean)),
-    ).sort(),
-  ];
+  const uniqueLocations = ["All Locations", ...allCities];
 
   const filteredReviews = allReviews.filter((review) => {
     const matchesType =
       selectedType === "All Types" || review.type === selectedType;
     const matchesLocation =
-      selectedLocation === "All Locations" || review.city === selectedLocation;
+      selectedLocation === "All Locations" ||
+      normalizeCityKey(review.city || "") === normalizeCityKey(selectedLocation);
     return matchesType && matchesLocation;
   });
 
@@ -436,7 +622,7 @@ function GlobalReviewsInner({ navigation }) {
 
         <Text style={styles.resultCount}>
           Showing {filteredReviews.length} reviews
-          {loadedTripCount < tripDocs.length ? " • more available" : ""}
+          {(streamingReviews || loadingMore) ? " • loading..." : ""}
         </Text>
       </View>
 
@@ -451,6 +637,7 @@ function GlobalReviewsInner({ navigation }) {
                 onPress={() => {
                   setSelectedLocation(location);
                   setShowLocationDropdown(false);
+                  loadReviewsByLocation(location);
                 }}
               >
                 <Text style={styles.dropdownItemText}>{location}</Text>
@@ -462,18 +649,20 @@ function GlobalReviewsInner({ navigation }) {
 
       {showTypeDropdown && (
         <View style={[styles.dropdown, styles.dropdownRight]}>
-          {REVIEW_TYPES.map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={styles.dropdownItem}
-              onPress={() => {
-                setSelectedType(type);
-                setShowTypeDropdown(false);
-              }}
-            >
-              <Text style={styles.dropdownItemText}>{type}</Text>
-            </TouchableOpacity>
-          ))}
+          <ScrollView style={styles.dropdownScroll} keyboardShouldPersistTaps="handled">
+            {REVIEW_TYPES.map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setSelectedType(type);
+                  setShowTypeDropdown(false);
+                }}
+              >
+                <Text style={styles.dropdownItemText}>{type}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -481,11 +670,28 @@ function GlobalReviewsInner({ navigation }) {
       <ScrollView
         style={styles.reviewsList}
         contentContainerStyle={styles.reviewsContent}
+        scrollEventThrottle={100}
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const nearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 800;
+          // Use refs — state values are stale in this callback due to closure
+          if (nearBottom && !loadingMoreRef.current && !streamingReviewsRef.current
+              && loadedTripCountRef.current < tripDocsRef.current.length) {
+            loadMoreTrips();
+          }
+        }}
       >
         {filteredReviews.length === 0 ? (
-          <Text style={styles.emptyText}>
-            No reviews found matching your filters.
-          </Text>
+          streamingReviews ? (
+            <View style={styles.streamingContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.streamingText}>Loading reviews...</Text>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>
+              No reviews found matching your filters.
+            </Text>
+          )
         ) : (
           <>
             {filteredReviews.map((review) => (
@@ -679,19 +885,12 @@ function GlobalReviewsInner({ navigation }) {
               </TouchableOpacity>
             ))}
 
-            {/* Load More */}
-            {loadedTripCount < tripDocs.length && (
-              <TouchableOpacity
-                style={styles.loadMoreButton}
-                onPress={loadMoreTrips}
-                disabled={loadingMore}
-              >
-                {loadingMore ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <Text style={styles.loadMoreButtonText}>Load More</Text>
-                )}
-              </TouchableOpacity>
+            {/* Auto-load indicator shown while fetching next batch */}
+            {(streamingReviews || loadingMore) && (
+              <View style={styles.streamingInline}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.streamingInlineText}>Loading more reviews...</Text>
+              </View>
             )}
           </>
         )}
@@ -1647,6 +1846,27 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(16),
     textAlign: "center",
     paddingVertical: scaleSpacing(SPACING.xl),
+  },
+  streamingContainer: {
+    alignItems: "center",
+    paddingVertical: scaleSpacing(SPACING.xl),
+    gap: scaleSpacing(SPACING.sm),
+  },
+  streamingText: {
+    color: COLORS.muted,
+    fontSize: scaleFontSize(14),
+    textAlign: "center",
+  },
+  streamingInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: scaleSpacing(SPACING.sm),
+    paddingVertical: scaleSpacing(SPACING.md),
+  },
+  streamingInlineText: {
+    color: COLORS.muted,
+    fontSize: scaleFontSize(13),
   },
   reviewCard: {
     backgroundColor: "#3d5266",

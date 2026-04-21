@@ -77,8 +77,12 @@ const features = [
     bullets: ["Adjust if plans shift", "Clean timeline", "Stay consistent"],
   },
   {
-    title: "Advanced Exports",
-    bullets: ["CSV export", "PDF flipbook", "Media backups"],
+    title: "Travel Tools",
+    bullets: [
+      "Packing lists",
+      "Budgeting & Currency Exchange",
+      "Tipping guide & Time zones",
+    ],
   },
   {
     title: "Share Privately",
@@ -300,32 +304,18 @@ export default function LandingScreen() {
         <View style={styles.pricingContainer}>
           <PricingCard
             label="Monthly Plan"
-            price="$4.99"
+            price="$5.99"
             period="/mo"
-            bullets={[
-              "Unlimited trips & flipbooks",
-              "Private share links",
-              "Sync across all your devices",
-              "Early access to new features",
-              "Offline flipbook viewing",
-              "Export PDF/CSV",
-            ]}
+            bullets={[]}
             onPress={handleSubscribe}
           />
           <PricingCard
             label="Annual Plan"
             badge="Best value"
-            price="$39.99"
+            price="$49.99"
             period="/yr"
-            savings="Save $19.89 annually"
-            bullets={[
-              "Everything in Monthly",
-              "Priority support for creators",
-              "Bonus: 2 months free vs monthly",
-              "Perfect for frequent travelers",
-              "Advanced media backups",
-              "Early access to experimental features",
-            ]}
+            savings="Save $21.89 annually"
+            bullets={[]}
             highlight
             onPress={handleSubscribe}
           />
@@ -418,17 +408,23 @@ export default function LandingScreen() {
             <TouchableOpacity onPress={() => navigation.navigate(SCREENS.FAQS)}>
               <Text style={styles.footerLink}>FAQs</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TUTORIALS)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.TUTORIALS)}
+            >
               <Text style={styles.footerLink}>Tutorials</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.SIGNUP)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.SIGNUP)}
+            >
               <Text style={styles.footerLink}>Subscribe</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Support</Text>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}
+            >
               <Text style={styles.footerLink}>Help & Support</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setFeedbackVisible(true)}>
@@ -438,10 +434,14 @@ export default function LandingScreen() {
 
           <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Legal</Text>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.PRIVACY)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.PRIVACY)}
+            >
               <Text style={styles.footerLink}>Privacy Policy</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TERMS)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.TERMS)}
+            >
               <Text style={styles.footerLink}>Terms of Service</Text>
             </TouchableOpacity>
           </View>

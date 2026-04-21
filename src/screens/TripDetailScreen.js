@@ -403,15 +403,7 @@ export default function TripDetailScreen() {
           </View>
         </View>
 
-        {/* Description */}
-        {trip.description && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.description}>{trip.description}</Text>
-          </View>
-        )}
-
-        {/* Trip Detail Map */}
+        {/* b. Trip Map */}
         <View style={styles.section}>
           <TripDetailMap
             trip={trip}
@@ -421,7 +413,110 @@ export default function TripDetailScreen() {
           />
         </View>
 
-        {/* Photos Grid */}
+        {/* Description (below map) */}
+        {trip.description && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.description}>{trip.description}</Text>
+          </View>
+        )}
+
+        {/* c. Itinerary */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Itinerary</Text>
+          {itinerary.map((row, i) => (
+            <View key={i} style={styles.itineraryItem}>
+              <View style={styles.itineraryHeader}>
+                <Text style={styles.itineraryKind}>{row.kind}</Text>
+                {row.subcollection !== "trip" && (
+                  <TouchableOpacity
+                    onPress={() =>
+                      handleViewPhotos(row.data.id, row.subcollection)
+                    }
+                  >
+                    <Text style={styles.viewPhotosLink}>View Photos</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={styles.itineraryName}>{row.data.name}</Text>
+              <Text style={styles.itineraryDates}>
+                {formatDate(row.data.startDate)}
+                {row.data.endDate
+                  ? ` → ${formatDate(row.data.endDate)}`
+                  : ""}
+              </Text>
+              {row.data.city && (
+                <Text style={styles.itineraryLocation}>
+                  {[row.data.city, row.data.state, row.data.country]
+                    .filter(Boolean)
+                    .join(", ")}
+                </Text>
+              )}
+            </View>
+          ))}
+          {itinerary.length === 0 && (
+            <Text style={styles.emptyText}>No itinerary entries yet</Text>
+          )}
+        </View>
+
+        {/* d. Destinations */}
+        <PlaceSection
+          title="Destinations"
+          items={destinations}
+          subcollection="destinations"
+          onViewPhotos={handleViewPhotos}
+          formatDate={formatDate}
+          formatPhone={formatPhoneNumber}
+        />
+
+        {/* e. Activities */}
+        <PlaceSection
+          title="Activities"
+          items={activities}
+          subcollection="activities"
+          onViewPhotos={handleViewPhotos}
+          formatDate={formatDate}
+          formatPhone={formatPhoneNumber}
+        />
+
+        {/* f. Accommodations */}
+        <PlaceSection
+          title="Accommodations"
+          items={accommodations}
+          subcollection="accommodations"
+          onViewPhotos={handleViewPhotos}
+          formatDate={formatDate}
+          formatPhone={formatPhoneNumber}
+        />
+
+        {/* g. Restaurants */}
+        <PlaceSection
+          title="Restaurants"
+          items={restaurants}
+          subcollection="restaurants"
+          onViewPhotos={handleViewPhotos}
+          formatDate={formatDate}
+          formatPhone={formatPhoneNumber}
+        />
+
+        {/* Cruises */}
+        <PlaceSection
+          title="Cruises"
+          items={cruises}
+          subcollection="cruises"
+          onViewPhotos={handleViewPhotos}
+          formatDate={formatDate}
+          formatPhone={formatPhoneNumber}
+        />
+
+        {/* Extras / Others */}
+        <ExtrasSection
+          items={extras}
+          formatDate={formatDate}
+          onDelete={deleteExtra}
+        />
+
+        {/* h. Photos */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Photos</Text>
           <View style={styles.photosGrid}>
@@ -482,101 +577,6 @@ export default function TripDetailScreen() {
             <Text style={styles.emptyText}>No photos yet</Text>
           )}
         </View>
-
-        {/* Itinerary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Itinerary</Text>
-          {itinerary.map((row, i) => (
-            <View key={i} style={styles.itineraryItem}>
-              <View style={styles.itineraryHeader}>
-                <Text style={styles.itineraryKind}>{row.kind}</Text>
-                {row.subcollection !== "trip" && (
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleViewPhotos(row.data.id, row.subcollection)
-                    }
-                  >
-                    <Text style={styles.viewPhotosLink}>View Photos</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <Text style={styles.itineraryName}>{row.data.name}</Text>
-              <Text style={styles.itineraryDates}>
-                {formatDate(row.data.startDate)}
-                {row.data.endDate
-                  ? ` → ${formatDate(row.data.endDate)}`
-                  : ""}
-              </Text>
-              {row.data.city && (
-                <Text style={styles.itineraryLocation}>
-                  {[row.data.city, row.data.state, row.data.country]
-                    .filter(Boolean)
-                    .join(", ")}
-                </Text>
-              )}
-            </View>
-          ))}
-          {itinerary.length === 0 && (
-            <Text style={styles.emptyText}>No itinerary entries yet</Text>
-          )}
-        </View>
-
-        {/* Destinations */}
-        <PlaceSection
-          title="Destinations"
-          items={destinations}
-          subcollection="destinations"
-          onViewPhotos={handleViewPhotos}
-          formatDate={formatDate}
-          formatPhone={formatPhoneNumber}
-        />
-
-        {/* Activities */}
-        <PlaceSection
-          title="Activities"
-          items={activities}
-          subcollection="activities"
-          onViewPhotos={handleViewPhotos}
-          formatDate={formatDate}
-          formatPhone={formatPhoneNumber}
-        />
-
-        {/* Accommodations */}
-        <PlaceSection
-          title="Accommodations"
-          items={accommodations}
-          subcollection="accommodations"
-          onViewPhotos={handleViewPhotos}
-          formatDate={formatDate}
-          formatPhone={formatPhoneNumber}
-        />
-
-        {/* Restaurants */}
-        <PlaceSection
-          title="Restaurants"
-          items={restaurants}
-          subcollection="restaurants"
-          onViewPhotos={handleViewPhotos}
-          formatDate={formatDate}
-          formatPhone={formatPhoneNumber}
-        />
-
-        {/* Cruises */}
-        <PlaceSection
-          title="Cruises"
-          items={cruises}
-          subcollection="cruises"
-          onViewPhotos={handleViewPhotos}
-          formatDate={formatDate}
-          formatPhone={formatPhoneNumber}
-        />
-
-        {/* Extras / Others */}
-        <ExtrasSection
-          items={extras}
-          formatDate={formatDate}
-          onDelete={deleteExtra}
-        />
       </ScrollView>
 
       {/* Flipbook Modal */}

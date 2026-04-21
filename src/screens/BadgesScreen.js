@@ -3,13 +3,14 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -28,93 +29,177 @@ import {
 import { COLORS, SPACING, scaleFontSize, scaleSpacing, isTablet } from "../lib/constants";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATIC IMAGE MAP  (React Native requires static require paths)
+// STATIC SVG MAP  (react-native-svg-transformer — static imports required)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Category icons
+import CatMilesTraveled       from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled.svg";
+import CatStatesVisited       from "../../assets/TMA FINAL BADGES/States Visited/States Visited.svg";
+import CatCountriesVisited    from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited.svg";
+import CatFirstTimeMilestones from "../../assets/TMA FINAL BADGES/First-Time Milestones/First-Time Milestones-01.svg";
+import CatDistanceMileage     from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Distance and mileage achievement.svg";
+import CatDestinationBased    from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Destination-Based Achievements.svg";
+import CatFrequencyStreak     from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Frequency & Streak Achievements.svg";
+import CatTimingSeasonal      from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Timing & Seasonal Achievements.svg";
+import CatWonders             from "../../assets/TMA FINAL BADGES/7 Wonders of the World/7 Wonders of the World.svg";
+
+// Miles Travelled tiers
+import MilesBronze   from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Bronze.svg";
+import MilesSilver   from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Silver.svg";
+import MilesGold     from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Gold.svg";
+import MilesPlatinum from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Platinum.svg";
+import MilesDiamond  from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Diamond-01.svg";
+import MilesTitan    from "../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Titan.svg";
+
+// States Visited tiers
+import StatesBronze   from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Bronze.svg";
+import StatesSilver   from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Silver.svg";
+import StatesGold     from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Gold.svg";
+import StatesPlatinum from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Platinum.svg";
+import StatesDiamond  from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Diamond-01.svg";
+import StatesTitan    from "../../assets/TMA FINAL BADGES/States Visited/States Visited_Titan.svg";
+
+// Countries Visited tiers
+import CountriesBronze   from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Bronze.svg";
+import CountriesSilver   from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Silver.svg";
+import CountriesGold     from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Gold.svg";
+import CountriesPlatinum from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Platinum.svg";
+import CountriesDiamond  from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Diamond-01.svg";
+import CountriesTitan    from "../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Titan.svg";
+
+// First-Time Milestones
+import BorderCrosser      from "../../assets/TMA FINAL BADGES/First-Time Milestones/Border Crosser-01.svg";
+import FirstFlight        from "../../assets/TMA FINAL BADGES/First-Time Milestones/First Flight-01.svg";
+import FirstAccommodation from "../../assets/TMA FINAL BADGES/First-Time Milestones/First Accommodation Stay-01.svg";
+import FirstLoggedTrip    from "../../assets/TMA FINAL BADGES/First-Time Milestones/First Logged Trip-01.svg";
+import RoadTripRookie     from "../../assets/TMA FINAL BADGES/First-Time Milestones/Road Trip Rookie-01.svg";
+
+// Distance & Mileage
+import DistanceDriver      from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Distance Driver.svg";
+import LongHaulTraveler    from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Long Haul Traveler.svg";
+import RoadMarathoner      from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Road Marathoner.svg";
+import MileageMaster       from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Mileage Master.svg";
+import CrossCountryCruiser from "../../assets/TMA FINAL BADGES/Distance and mileage achievement/Cross Country Cruiser.svg";
+
+// Destination-Based
+import CapitalCityExplorer from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Capital City Explorer.svg";
+import CityBreaker         from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/City Breaker.svg";
+import CulturalExplorer    from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Cultural Explorer.svg";
+import IslandHopper        from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Island Hopper.svg";
+import WaterfallExplorer   from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Waterfall Explorer.svg";
+import NatureEscape        from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/Nature Escape.svg";
+import NewYearNewPlaces    from "../../assets/TMA FINAL BADGES/Destination-Based Achievements/New Year New Places.svg";
+
+// Frequency & Streak
+import WeekendWanderer      from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Weekend Wanderer.svg";
+import WeekendWarrior       from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Weekend Warrior.svg";
+import TwelveMonthMomentum  from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/12 Month Momentum.svg";
+import SeasonalExplorer     from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Seasonal Explorer.svg";
+import AnnualTrailblazer    from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Annual Trailblazer.svg";
+import AnniversaryAdventurer from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Anniversary Adventurer.svg";
+import FrequentFlyerMonth   from "../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Frequent Flyer Month.svg";
+
+// Timing & Seasonal
+import MidweekMover   from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Midweek Mover.svg";
+import FallExplorer   from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Fall Explorer.svg";
+import SpringBreaker  from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Spring Breaker.svg";
+import SummerExplorer from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Summer Explorer.svg";
+import WinterWanderer from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Winter Wanderer.svg";
+import HolidayTraveler from "../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Holiday Traveler.svg";
+
+// 7 Wonders
+import GreatWallWanderer     from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Great Wall Wanderer.svg";
+import PetraPathfinder       from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Petra Pathfinder.svg";
+import RedeemerRidgeVisitor  from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Redeemer Ridge Visitor.svg";
+import MachuPicchuExplorer   from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Machu Picchu Explorer.svg";
+import ChichenItzaAdventurer from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Chichen Itza Adventurer.svg";
+import ColosseumChallenger   from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Colosseum Challenger.svg";
+import TajMahalTraveler      from "../../assets/TMA FINAL BADGES/7 Wonders of the World/Taj Mahal Traveler.svg";
 
 const BADGE_IMAGES = {
   // Category icons
-  cat_miles_traveled:       require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled.png"),
-  cat_states_visited:       require("../../assets/TMA FINAL BADGES/States Visited/States Visited.png"),
-  cat_countries_visited:    require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited.png"),
-  cat_first_time_milestones:require("../../assets/TMA FINAL BADGES/First-Time Milestones/First-Time Milestones-01.png"),
-  cat_distance_mileage:     require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Distance and mileage achievement.png"),
-  cat_destination_based:    require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Destination-Based Achievements.png"),
-  cat_frequency_streak:     require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Frequency & Streak Achievements.png"),
-  cat_timing_seasonal:      require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Timing & Seasonal Achievements.png"),
-  cat_wonders:              require("../../assets/TMA FINAL BADGES/7 Wonders of the World/7 Wonders of the World.png"),
+  cat_miles_traveled:        CatMilesTraveled,
+  cat_states_visited:        CatStatesVisited,
+  cat_countries_visited:     CatCountriesVisited,
+  cat_first_time_milestones: CatFirstTimeMilestones,
+  cat_distance_mileage:      CatDistanceMileage,
+  cat_destination_based:     CatDestinationBased,
+  cat_frequency_streak:      CatFrequencyStreak,
+  cat_timing_seasonal:       CatTimingSeasonal,
+  cat_wonders:               CatWonders,
 
-  // Miles Traveled tiers
-  miles_bronze:   require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Bronze-01.jpg"),
-  miles_silver:   require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Silver-01.png"),
-  miles_gold:     require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Gold-01.png"),
-  miles_platinum: require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Platinum-01.png"),
-  miles_diamond:  require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Diamond-01.png"),
-  miles_titan:    require("../../assets/TMA FINAL BADGES/Miles Travelled/Miles Travelled_Titan.png"),
+  // Miles Travelled tiers
+  miles_bronze:   MilesBronze,
+  miles_silver:   MilesSilver,
+  miles_gold:     MilesGold,
+  miles_platinum: MilesPlatinum,
+  miles_diamond:  MilesDiamond,
+  miles_titan:    MilesTitan,
 
   // States Visited tiers
-  states_bronze:   require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Bronze-01.png"),
-  states_silver:   require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Silver-01.png"),
-  states_gold:     require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Gold-01.png"),
-  states_platinum: require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Platinum-01.png"),
-  states_diamond:  require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Diamond-01.png"),
-  states_titan:    require("../../assets/TMA FINAL BADGES/States Visited/States Visited_Titan.png"),
+  states_bronze:   StatesBronze,
+  states_silver:   StatesSilver,
+  states_gold:     StatesGold,
+  states_platinum: StatesPlatinum,
+  states_diamond:  StatesDiamond,
+  states_titan:    StatesTitan,
 
   // Countries Visited tiers
-  countries_bronze:   require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Bronze-01.png"),
-  countries_silver:   require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Silver-01.png"),
-  countries_gold:     require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Gold-01.png"),
-  countries_platinum: require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Platinum-01.png"),
-  countries_diamond:  require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Diamond.png"),
-  countries_titan:    require("../../assets/TMA FINAL BADGES/Countries Visited/Countries Visited_Titan.png"),
+  countries_bronze:   CountriesBronze,
+  countries_silver:   CountriesSilver,
+  countries_gold:     CountriesGold,
+  countries_platinum: CountriesPlatinum,
+  countries_diamond:  CountriesDiamond,
+  countries_titan:    CountriesTitan,
 
   // First-Time Milestones
-  border_crosser:      require("../../assets/TMA FINAL BADGES/First-Time Milestones/Border Crosser-01.png"),
-  first_flight:        require("../../assets/TMA FINAL BADGES/First-Time Milestones/First Flight-01.png"),
-  first_accommodation: require("../../assets/TMA FINAL BADGES/First-Time Milestones/First Accommodation Stay-01.png"),
-  first_logged_trip:   require("../../assets/TMA FINAL BADGES/First-Time Milestones/First Logged Trip-01.png"),
-  road_trip_rookie:    require("../../assets/TMA FINAL BADGES/First-Time Milestones/Road Trip Rookie.png"),
+  border_crosser:      BorderCrosser,
+  first_flight:        FirstFlight,
+  first_accommodation_stay: FirstAccommodation,
+  first_logged_trip:   FirstLoggedTrip,
+  road_trip_rookie:    RoadTripRookie,
 
-  // Distance & Mileage Achievement
-  distance_driver:       require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Distance Driver.png"),
-  long_haul_traveler:    require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Long Haul Traveler.png"),
-  road_marathoner:       require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Road Marathoner.png"),
-  mileage_master:        require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Mileage Master.png"),
-  cross_country_cruiser: require("../../assets/TMA FINAL BADGES/Distance and mileage achievement/Cross Country Cruiser.png"),
+  // Distance & Mileage
+  distance_driver:       DistanceDriver,
+  long_haul_traveler:    LongHaulTraveler,
+  road_marathoner:       RoadMarathoner,
+  mileage_master:        MileageMaster,
+  cross_country_cruiser: CrossCountryCruiser,
 
-  // Destination-Based Achievements
-  capital_city_explorer: require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Capital City Explorer.png"),
-  city_breaker:          require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/City Breaker.png"),
-  cultural_explorer:     require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Cultural Explorer.png"),
-  island_hopper:         require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Island Hopper.png"),
-  waterfall_explorer:    require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Waterfall Explorer.png"),
-  nature_escape:         require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/Nature Escape.png"),
-  new_year_new_places:   require("../../assets/TMA FINAL BADGES/Destination-Based Achievements/New Year New Places.png"),
+  // Destination-Based
+  capital_city_explorer: CapitalCityExplorer,
+  city_breaker:          CityBreaker,
+  cultural_explorer:     CulturalExplorer,
+  island_hopper:         IslandHopper,
+  waterfall_explorer:    WaterfallExplorer,
+  nature_escape:         NatureEscape,
+  new_year_new_places:   NewYearNewPlaces,
 
-  // Frequency & Streak Achievements
-  weekend_wanderer:       require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Weekend Wanderer.png"),
-  weekend_warrior:        require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Weekend Warrior.png"),
-  twelve_month_momentum:  require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/12 Month Momentum.png"),
-  seasonal_explorer:      require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Seasonal Explorer.png"),
-  annual_trailblazer:     require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Annual Trailblazer.png"),
-  anniversary_adventurer: require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Anniversary Adventurer.png"),
-  frequent_flyer_month:   require("../../assets/TMA FINAL BADGES/Frequency & Streak Achievements/Frequent Flyer Month.png"),
+  // Frequency & Streak
+  weekend_wanderer:       WeekendWanderer,
+  weekend_warrior:        WeekendWarrior,
+  twelve_month_momentum:  TwelveMonthMomentum,
+  seasonal_explorer:      SeasonalExplorer,
+  annual_trailblazer:     AnnualTrailblazer,
+  anniversary_adventurer: AnniversaryAdventurer,
+  frequent_flyer_month:   FrequentFlyerMonth,
 
-  // Timing & Seasonal Achievements
-  midweek_mover:   require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Midweek Mover.png"),
-  fall_explorer:   require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Fall Explorer.png"),
-  spring_breaker:  require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Spring Breaker.png"),
-  summer_explorer: require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Summer Explorer.png"),
-  winter_wanderer: require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Winter Wanderer.png"),
-  holiday_traveler:require("../../assets/TMA FINAL BADGES/Timing & Seasonal Achievements/Timing & Seasonal Achievements/Holiday Traveler.png"),
+  // Timing & Seasonal
+  midweek_mover:   MidweekMover,
+  fall_explorer:   FallExplorer,
+  spring_breaker:  SpringBreaker,
+  summer_explorer: SummerExplorer,
+  winter_wanderer: WinterWanderer,
+  holiday_traveler: HolidayTraveler,
 
-  // Modern 7 Wonders
-  great_wall_wanderer:     require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Great Wall Wanderer.png"),
-  petra_pathfinder:        require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Petra Pathfinder.png"),
-  redeemer_ridge_visitor:  require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Redeemer Ridge Visitor.png"),
-  machu_picchu_explorer:   require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Machu Picchu Explorer.png"),
-  chichen_itza_adventurer: require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Chichen Itza Adventurer.png"),
-  colosseum_challenger:    require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Colosseum Challenger.png"),
-  taj_mahal_traveler:      require("../../assets/TMA FINAL BADGES/7 Wonders of the World/Taj Mahal Traveler.png"),
+  // 7 Wonders
+  great_wall_wanderer:     GreatWallWanderer,
+  petra_pathfinder:        PetraPathfinder,
+  redeemer_ridge_visitor:  RedeemerRidgeVisitor,
+  machu_picchu_explorer:   MachuPicchuExplorer,
+  chichen_itza_adventurer: ChichenItzaAdventurer,
+  colosseum_challenger:    ColosseumChallenger,
+  taj_mahal_traveler:      TajMahalTraveler,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,24 +302,61 @@ export default function BadgesScreen({ route }) {
           }
         });
 
-        // Accommodations – just need to know if any exist
+        // Accommodations: check trip-level accommodationType field (matches web)
+        // AND check accommodations subcollection
         if (!hasAccommodation) {
-          const accomSnap = await getDocs(
-            collection(db, "trips", trip.id, "accommodations")
-          );
-          if (!accomSnap.empty) hasAccommodation = true;
+          if (trip.accommodationType && trip.accommodationType.trim() !== "") {
+            hasAccommodation = true;
+          } else {
+            const accomSnap = await getDocs(
+              collection(db, "trips", trip.id, "accommodations")
+            );
+            if (!accomSnap.empty) hasAccommodation = true;
+          }
         }
+
+        // Activities subcollection – add to allLocations for badge detection
+        // (matches web behavior: activities checked for UNESCO, wonders, etc.)
+        const actSnap = await getDocs(
+          collection(db, "trips", trip.id, "activities")
+        );
+        actSnap.forEach((d) => {
+          const act = d.data();
+          if (act.city || act.name) {
+            allLocations.push({
+              city:    act.city    || "",
+              country: act.country || trip.country || "",
+              state:   act.state   || trip.state   || "",
+              name:    act.name    || "",
+            });
+          }
+        });
       }
 
-      // ── 3. Resolve totalMiles ──────────────────────────────────────────
-      // Prefer accurate stats from HomeScreen if passed; fall back to
-      // summing trip.totalMiles from documents (may undercount if not saved).
-      const totalMiles =
-        passedStats?.totalMiles ||
-        allTrips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+      // ── 3. Resolve stats ──────────────────────────────────────────────
+      // Priority:
+      //  1. passedStats from navigation (when tapped from HomeScreen)
+      //  2. users/{uid}.stats saved by web app (most accurate, cross-platform)
+      //  3. Per-trip totalMiles saved by web app to each trip document
+      let totalMiles    = passedStats?.totalMiles    ?? 0;
+      let statesCount   = passedStats?.statesVisited  ?? statesSet.size;
+      let countriesCount = passedStats?.countriesVisited ?? countriesSet.size;
 
-      const statesCount    = passedStats?.statesVisited    ?? statesSet.size;
-      const countriesCount = passedStats?.countriesVisited ?? countriesSet.size;
+      if (!passedStats?.totalMiles) {
+        try {
+          const userSnap = await getDoc(doc(db, "users", user.uid));
+          if (userSnap.exists()) {
+            const userStats = userSnap.data()?.stats;
+            if (userStats?.totalMiles)     totalMiles    = userStats.totalMiles;
+            if (userStats?.statesVisited)  statesCount   = userStats.statesVisited;
+            if (userStats?.countriesVisited) countriesCount = userStats.countriesVisited;
+          }
+        } catch (_) {}
+        // Final fallback: sum per-trip totalMiles stored by web app
+        if (!totalMiles) {
+          totalMiles = allTrips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+        }
+      }
 
       // ── 4. Evaluate ───────────────────────────────────────────────────
       const earned = evaluateBadges({
@@ -315,14 +437,14 @@ function CategorySection({ category, earnedSet, tieredData }) {
   const catEarned = badges.filter((b) => earnedSet.has(b.id)).length;
 
   const catImageKey = `cat_${category.id}`;
-  const catImage    = BADGE_IMAGES[catImageKey];
+  const CatSvg      = BADGE_IMAGES[catImageKey];
 
   return (
     <View style={styles.categorySection}>
       {/* Category header */}
       <View style={[styles.categoryHeader, { backgroundColor: category.color }]}>
-        {catImage && (
-          <Image source={catImage} style={styles.categoryIcon} resizeMode="contain" />
+        {CatSvg && (
+          <CatSvg width={styles.categoryIcon.width} height={styles.categoryIcon.height} />
         )}
         <View style={styles.categoryHeaderText}>
           <Text style={styles.categoryName}>{category.name}</Text>
@@ -423,18 +545,14 @@ function TieredProgress({ categoryId, category, value, label }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function BadgeCard({ badge, category, earned }) {
-  const imgSource = BADGE_IMAGES[badge.id];
-  const tierObj   = badge.tierId ? getTier(badge.tierId) : null;
+  const BadgeSvg = BADGE_IMAGES[badge.id];
+  const tierObj  = badge.tierId ? getTier(badge.tierId) : null;
 
   return (
     <View style={styles.badgeCard}>
       <View style={styles.badgeImageWrapper}>
-        {imgSource ? (
-          <Image
-            source={imgSource}
-            style={styles.badgeImage}
-            resizeMode="contain"
-          />
+        {BadgeSvg ? (
+          <BadgeSvg width="100%" height="100%" />
         ) : (
           <View
             style={[

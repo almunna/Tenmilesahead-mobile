@@ -41,7 +41,7 @@ import ModalShell from "./ModalShell";
 import ConfirmModal from "./ConfirmModal";
 import Dropdown from "../Dropdown";
 import DatePicker from "../DatePicker";
-import { COLORS, SPACING } from "../../lib/constants";
+import { COLORS, SPACING, API_BASE_URL } from "../../lib/constants";
 import { COUNTRIES, getStates, matchCountryName, matchStateName } from "../../lib/geo";
 import { sortAZWithOtherLast } from "../../lib/utils";
 import PlaceAutocomplete from "../PlaceAutocomplete";
@@ -54,6 +54,11 @@ export default function PlaceModal({
   subcollection, // "destinations" | "activities" | "accommodations" | "restaurants"
   extraLeft = [], // Additional fields like transportationType
 }) {
+  // Proper singular: "Activities"→"Activity", "Destinations"→"Destination", etc.
+  const singularTitle = title?.endsWith("ies")
+    ? title.slice(0, -3) + "y"
+    : title?.slice(0, -1) ?? title;
+
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -321,7 +326,7 @@ export default function PlaceModal({
             storagePath: path,
             downloadURL: url,
             createdAt: Date.now(),
-            caption: `${title.slice(0, -1)} • ${form.name}`,
+            caption: `${singularTitle} • ${form.name}`,
             linkedSubcollection: subcollection,
             linkedId: placeId,
             fileName: name || safeName,
@@ -380,7 +385,7 @@ export default function PlaceModal({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
-      quality: 0.8,
+      quality: 1,
     });
 
     if (!result.canceled && result.assets) {
@@ -395,37 +400,43 @@ export default function PlaceModal({
       const place = items.find((item) => item.id === placeId);
       const placeName = place?.name || "";
 
+      const idToken = await user.getIdToken();
+
       for (const asset of assets) {
         const { uri, fileName } = asset;
 
-        // Fetch the file as a blob
-        const response = await fetch(uri);
-        const blob = await response.blob();
-
-        // Store in trips/{tripId}/media collection like the web version
         const mediaRef = doc(collection(db, "trips", tripId, "media"));
-        const mediaId = mediaRef.id;
 
-        const safeName = (fileName || `photo_${Date.now()}.jpg`).replace(
-          /[^\w.\-]+/g,
-          "_"
-        );
-        const path = `trip_media/${user.uid}/${tripId}/${mediaId}/${safeName}`;
-        const sref = storageRef(storage, path);
-
-        await uploadBytes(sref, blob);
-        const url = await getDownloadURL(sref);
+        const formData = new FormData();
+        formData.append("file", {
+          uri,
+          name: fileName || `photo_${Date.now()}.jpg`,
+          type: asset.mimeType || "image/jpeg",
+        });
+        formData.append("ownerId", user.uid);
+        formData.append("tripId", tripId);
+        formData.append("idToken", idToken);
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `Upload failed (${res.status})`);
+        }
+        const { downloadURL, storagePath } = await res.json();
 
         await setDoc(mediaRef, {
           tripId,
+          ownerId: user.uid,
           type: "image",
-          storagePath: path,
-          downloadURL: url,
+          storagePath,
+          downloadURL,
           createdAt: Date.now(),
-          caption: `${title.slice(0, -1)} • ${placeName}`,
+          takenAt: asset.modificationTime || Date.now(),
+          caption: `${singularTitle} • ${placeName}`,
           linkedSubcollection: subcollection,
           linkedId: placeId,
-          fileName: safeName,
         });
       }
 
@@ -523,7 +534,7 @@ export default function PlaceModal({
           storagePath: path,
           downloadURL: url,
           createdAt: Date.now(),
-          caption: `${title.slice(0, -1)} • ${placeName}`,
+          caption: `${singularTitle} • ${placeName}`,
           linkedSubcollection: subcollection,
           linkedId: placeId,
           fileName: name || safeName,
@@ -802,7 +813,7 @@ export default function PlaceModal({
           {showAddForm ? (
             <ScrollView style={styles.formContainer}>
               <Text style={styles.formTitle}>
-                {editingItem ? "Edit" : "Add"} {title.slice(0, -1)}
+                {editingItem ? "Edit" : "Add"} {singularTitle}
               </Text>
 
               <Text style={styles.label}>Name *</Text>
@@ -826,19 +837,26 @@ export default function PlaceModal({
                     websiteUrl: details.websiteUrl || prev.websiteUrl,
                   }));
                 }}
-                placeholder={`Search for ${title.slice(0, -1).toLowerCase()}...`}
+                placeholder={`Search for ${singularTitle.toLowerCase()}...`}
                 style={styles.input}
               />
 
-              <Dropdown
-                label="Country"
-                value={form.country}
-                options={sortedCountries}
-                onSelect={(value) =>
-                  setForm({ ...form, country: value, state: "" })
-                }
-                placeholder="Select country"
-                searchable
+              <Text style={styles.label}>Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Street address"
+                placeholderTextColor={COLORS.muted}
+                value={form.address}
+                onChangeText={(text) => setForm({ ...form, address: text })}
+              />
+
+              <Text style={styles.label}>City</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="City name"
+                placeholderTextColor={COLORS.muted}
+                value={form.city}
+                onChangeText={(text) => setForm({ ...form, city: text })}
               />
 
               <Dropdown
@@ -851,22 +869,15 @@ export default function PlaceModal({
                 allowCustom
               />
 
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="City name"
-                placeholderTextColor={COLORS.muted}
-                value={form.city}
-                onChangeText={(text) => setForm({ ...form, city: text })}
-              />
-
-              <Text style={styles.label}>Address</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Street address"
-                placeholderTextColor={COLORS.muted}
-                value={form.address}
-                onChangeText={(text) => setForm({ ...form, address: text })}
+              <Dropdown
+                label="Country"
+                value={form.country}
+                options={sortedCountries}
+                onSelect={(value) =>
+                  setForm({ ...form, country: value, state: "" })
+                }
+                placeholder="Select country"
+                searchable
               />
 
               <Text style={styles.label}>Phone Number</Text>
@@ -1032,7 +1043,7 @@ export default function PlaceModal({
                   onPress={() => setShowAddForm(true)}
                 >
                   <Text style={styles.addButtonText}>
-                    + Add {title.slice(0, -1)}
+                    + Add {singularTitle}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1058,7 +1069,7 @@ export default function PlaceModal({
 
       <ConfirmModal
         isOpen={!!deleteId}
-        title={`Delete ${title.slice(0, -1)}`}
+        title={`Delete ${singularTitle}`}
         message={`Are you sure you want to delete this ${title
           .slice(0, -1)
           .toLowerCase()}? All photos and attached files will also be deleted.`}

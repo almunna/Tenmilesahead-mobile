@@ -1,143 +1,57 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Share,
 } from "react-native";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
-import { db } from "../../lib/firebase";
+import { Ionicons } from "@expo/vector-icons";
 import ModalShell from "./ModalShell";
-import { COLORS, SPACING } from "../../lib/constants";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../../lib/constants";
 
 export default function ShareTripModal({ tripId, visible, onClose }) {
-  const [shareToken, setShareToken] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const shareUrl = tripId
+    ? `https://tenmilesahead.com/share?tripId=${tripId}`
+    : "";
 
-  // Generate share link
-  async function generateShareLink() {
-    if (!tripId) return;
-    setLoading(true);
-
-    try {
-      const tripRef = doc(db, "trips", tripId);
-      const tripSnap = await getDoc(tripRef);
-
-      if (tripSnap.exists()) {
-        const tripData = tripSnap.data();
-
-        // Check if share token already exists
-        if (tripData.shareToken) {
-          setShareToken(tripData.shareToken);
-        } else {
-          // Generate new token
-          const token = Math.random().toString(36).substring(2, 15) +
-            Math.random().toString(36).substring(2, 15);
-
-          await updateDoc(tripRef, {
-            shareToken: token,
-            shareEnabled: true,
-            updatedAt: Date.now(),
-          });
-
-          setShareToken(token);
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to generate share link");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Copy link to clipboard and share
-  async function shareLink() {
-    if (!shareToken) return;
-
-    const shareUrl = `https://tenmilesahead.com/share/${shareToken}`;
-
+  async function handleShare() {
+    if (!shareUrl) return;
     try {
       await Share.share({
         message: `Check out my trip on Ten Miles Ahead! ${shareUrl}`,
         url: shareUrl,
       });
-    } catch (error) {
-    }
-  }
-
-  // Disable sharing
-  async function disableSharing() {
-    if (!tripId) return;
-    setLoading(true);
-
-    try {
-      const tripRef = doc(db, "trips", tripId);
-      await updateDoc(tripRef, {
-        shareEnabled: false,
-        updatedAt: Date.now(),
-      });
-      setShareToken(null);
-      Alert.alert("Success", "Sharing has been disabled");
-    } catch (error) {
-      Alert.alert("Error", "Failed to disable sharing");
-    } finally {
-      setLoading(false);
+    } catch {
+      // user cancelled
     }
   }
 
   return (
     <ModalShell visible={visible} title="Share Trip" onClose={onClose}>
       <View style={styles.content}>
-        {!shareToken ? (
-          <>
-            <Text style={styles.description}>
-              Generate a shareable link to let others view your trip.
-            </Text>
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={generateShareLink}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? "Generating..." : "Generate Share Link"}
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.label}>Share Link:</Text>
-            <View style={styles.linkContainer}>
-              <TextInput
-                style={styles.linkInput}
-                value={`tenmilesahead.com/share/${shareToken}`}
-                editable={false}
-                selectTextOnFocus
-              />
-            </View>
+        <Text style={styles.description}>
+          Share this link with anyone to let them view your trip.
+        </Text>
 
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={shareLink}
-              >
-                <Text style={styles.buttonText}>Share</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Link display */}
+        <View style={styles.linkBox}>
+          <Ionicons name="link-outline" size={scaleFontSize(16)} color={COLORS.muted} style={styles.linkIcon} />
+          <TextInput
+            style={styles.linkInput}
+            value={shareUrl}
+            editable={false}
+            selectTextOnFocus
+            numberOfLines={1}
+          />
+        </View>
 
-            <TouchableOpacity
-              style={styles.disableButton}
-              onPress={disableSharing}
-              disabled={loading}
-            >
-              <Text style={styles.disableButtonText}>
-                {loading ? "Disabling..." : "Disable Sharing"}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
+        {/* Share button */}
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleShare}>
+          <Ionicons name="share-social-outline" size={scaleFontSize(18)} color={COLORS.white} />
+          <Text style={styles.primaryBtnText}>Share</Text>
+        </TouchableOpacity>
       </View>
     </ModalShell>
   );
@@ -145,55 +59,45 @@ export default function ShareTripModal({ tripId, visible, onClose }) {
 
 const styles = StyleSheet.create({
   content: {
-    padding: SPACING.md,
+    padding: scaleSpacing(SPACING.md),
   },
   description: {
-    fontSize: 16,
+    fontSize: scaleFontSize(14),
     color: COLORS.muted,
-    marginBottom: SPACING.lg,
-    lineHeight: 24,
+    marginBottom: scaleSpacing(SPACING.lg),
+    lineHeight: scaleFontSize(20),
   },
-  label: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginBottom: SPACING.sm,
-  },
-  linkContainer: {
+  linkBox: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    marginBottom: SPACING.lg,
+    paddingHorizontal: scaleSpacing(SPACING.sm),
+    marginBottom: scaleSpacing(SPACING.md),
+  },
+  linkIcon: {
+    marginRight: scaleSpacing(SPACING.xs),
+    flexShrink: 0,
   },
   linkInput: {
-    color: COLORS.foreground,
-    fontSize: 14,
-    padding: SPACING.md,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
-  },
-  button: {
     flex: 1,
+    color: COLORS.foreground,
+    fontSize: scaleFontSize(13),
+    paddingVertical: scaleSpacing(SPACING.sm),
+  },
+  primaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: scaleSpacing(SPACING.xs),
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
+    paddingVertical: scaleSpacing(SPACING.md),
     borderRadius: 8,
-    alignItems: "center",
+    marginBottom: scaleSpacing(SPACING.sm),
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
+  primaryBtnText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: scaleFontSize(15),
     fontWeight: "600",
-  },
-  disableButton: {
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-  },
-  disableButtonText: {
-    color: COLORS.error,
-    fontSize: 14,
   },
 });

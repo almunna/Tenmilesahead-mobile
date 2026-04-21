@@ -8,9 +8,8 @@ import {
   RefreshControl,
   Image,
   Modal,
-  Platform,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import CalendarPickerModal from "../components/CalendarPickerModal";
 import { useNavigation } from "@react-navigation/native";
 import {
   collection,
@@ -611,9 +610,8 @@ export default function HomeScreen() {
     >
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>
-          Welcome {profile?.username || "traveler"}!
-        </Text>
+        <Text style={styles.welcomeText}>Welcome,</Text>
+        <Text style={styles.welcomeName}>{profile?.username || "traveler"}!</Text>
       </View>
 
       {/* Pending Bookings Banner */}
@@ -762,7 +760,7 @@ export default function HomeScreen() {
       {/* My Badges */}
       <TouchableOpacity
         style={styles.badgesCard}
-        onPress={() => navigation.navigate(SCREENS.BADGES, { stats })}
+        onPress={() => navigation.navigate("Achievements")}
         activeOpacity={0.85}
       >
         <View style={styles.badgesCardLeft}>
@@ -1069,41 +1067,21 @@ export default function HomeScreen() {
       )}
 
       {/* Date Pickers */}
-      {showFromPicker && (
-        <DateTimePicker
-          value={dateFrom ? new Date(dateFrom) : new Date()}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
-            setShowFromPicker(Platform.OS === "ios");
-            if (selectedDate) {
-              const dateStr = selectedDate.toISOString().split("T")[0];
-              setDateFrom(dateStr);
-            }
-            if (Platform.OS === "android") {
-              setShowFromPicker(false);
-            }
-          }}
-        />
-      )}
+      <CalendarPickerModal
+        visible={showFromPicker}
+        value={dateFrom ? new Date(dateFrom) : new Date()}
+        title="Filter From Date"
+        onSelect={(d) => setDateFrom(d.toISOString().split("T")[0])}
+        onClose={() => setShowFromPicker(false)}
+      />
 
-      {showToPicker && (
-        <DateTimePicker
-          value={dateTo ? new Date(dateTo) : new Date()}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
-            setShowToPicker(Platform.OS === "ios");
-            if (selectedDate) {
-              const dateStr = selectedDate.toISOString().split("T")[0];
-              setDateTo(dateStr);
-            }
-            if (Platform.OS === "android") {
-              setShowToPicker(false);
-            }
-          }}
-        />
-      )}
+      <CalendarPickerModal
+        visible={showToPicker}
+        value={dateTo ? new Date(dateTo) : dateFrom ? new Date(dateFrom) : new Date()}
+        title="Filter To Date"
+        onSelect={(d) => setDateTo(d.toISOString().split("T")[0])}
+        onClose={() => setShowToPicker(false)}
+      />
     </ScrollView>
   );
 }
@@ -1190,6 +1168,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   welcomeText: {
+    fontSize: scaleFontSize(28),
+    fontWeight: "bold",
+    color: COLORS.white,
+    textAlign: "center",
+  },
+  welcomeName: {
     fontSize: scaleFontSize(28),
     fontWeight: "bold",
     color: COLORS.white,

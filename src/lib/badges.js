@@ -134,7 +134,7 @@ export const ALL_BADGES = [
   // ── First-Time Milestones ─────────────────────────────────────────────────
   { id: 'border_crosser',      categoryId: 'first_time_milestones', name: 'Border Crosser',          description: 'First time entering a new country',       emoji: '🛂' },
   { id: 'first_flight',        categoryId: 'first_time_milestones', name: 'First Flight',            description: 'First plane trip',                        emoji: '✈️' },
-  { id: 'first_accommodation', categoryId: 'first_time_milestones', name: 'First Accommodation Stay',description: 'First accommodation stay',                 emoji: '🏨' },
+  { id: 'first_accommodation_stay', categoryId: 'first_time_milestones', name: 'First Accommodation Stay',description: 'First accommodation stay',                 emoji: '🏨' },
   { id: 'first_logged_trip',   categoryId: 'first_time_milestones', name: 'First Logged Trip',       description: 'First logged trip',                       emoji: '📝' },
   { id: 'road_trip_rookie',    categoryId: 'first_time_milestones', name: 'Road Trip Rookie',        description: 'First 100+ miles driven in a trip',       emoji: '🚗' },
 
@@ -480,19 +480,15 @@ export function evaluateBadges(data) {
   if (hasAnyFlight) earned.add('first_flight');
 
   // ── First Accommodation Stay ──────────────────────────────────────────────
-  if (hasAccommodation) earned.add('first_accommodation');
+  if (hasAccommodation) earned.add('first_accommodation_stay');
 
   // ── Border Crosser ────────────────────────────────────────────────────────
-  // Earned when user has a trip to a non-USA country OR multiple countries
-  const uniqueCountryNorms = new Set(
-    allLocations.map((l) => norm(l.country)).filter(Boolean)
-  );
-  const nonUSACountries = [...uniqueCountryNorms].filter((c) => !isUSA(c));
-  if (nonUSACountries.length > 0) earned.add('border_crosser');
+  // Matches web: earned when user has visited 2+ countries total
+  if (countriesCount >= 2) earned.add('border_crosser');
 
   // ── Road Trip Rookie ──────────────────────────────────────────────────────
-  const rookieTrip = carRvTrips.find((t) => t.miles >= 100);
-  if (rookieTrip) earned.add('road_trip_rookie');
+  // Matches web: any car/RV trip earns the badge (no mileage minimum)
+  if (carRvTrips.length > 0) earned.add('road_trip_rookie');
 
   // ── Distance & Mileage (per-trip, Car/RV) ────────────────────────────────
   const maxCarRvMiles = carRvTrips.reduce((m, t) => Math.max(m, t.miles), 0);
@@ -646,21 +642,14 @@ export function evaluateBadges(data) {
     return mo === 3 || mo === 4;
   })) earned.add('spring_breaker');
 
-  // Summer Explorer – 3+ trips in Jun-Aug of the same year
+  // Summer Explorer – 3+ trips in Jun-Aug across any years (matches web)
   {
-    const summerByYear = {};
-    for (const t of trips) {
-      if (!t.startDate) continue;
-      const d  = new Date(t.startDate);
-      const mo = d.getMonth() + 1;
-      if (mo >= 6 && mo <= 8) {
-        const yr = d.getFullYear();
-        summerByYear[yr] = (summerByYear[yr] || 0) + 1;
-      }
-    }
-    if (Object.values(summerByYear).some((c) => c >= 3)) {
-      earned.add('summer_explorer');
-    }
+    const summerCount = trips.filter((t) => {
+      if (!t.startDate) return false;
+      const mo = new Date(t.startDate).getMonth(); // 0-indexed
+      return mo >= 5 && mo <= 7; // June=5, July=6, August=7
+    }).length;
+    if (summerCount >= 3) earned.add('summer_explorer');
   }
 
   // Winter Wanderer – trip between Dec 1 – Feb 29
@@ -676,53 +665,37 @@ export function evaluateBadges(data) {
   }
 
   // ── Modern 7 Wonders ─────────────────────────────────────────────────────
+  // Matches web: keyword-only matching across city, name, country fields
+  const WONDER_KEYWORDS_MAP = {
+    great_wall_wanderer:     ['great wall', 'badaling', 'mutianyu', 'jinshanling', 'simatai'],
+    petra_pathfinder:        ['petra', 'wadi musa', 'wadi mousa'],
+    redeemer_ridge_visitor:  ['christ the redeemer', 'corcovado', 'rio de janeiro'],
+    machu_picchu_explorer:   ['machu picchu', 'aguas calientes'],
+    chichen_itza_adventurer: ['chichen itza', 'chich\u00e9n itz\u00e1', 'piste'],
+    colosseum_challenger:    ['colosseum', 'colosseo', 'rome', 'roma'],
+    taj_mahal_traveler:      ['taj mahal', 'agra'],
+  };
+
   for (const loc of allLocations) {
-    const city    = norm(loc.city    || '');
-    const country = norm(loc.country || '');
-    const name    = norm(loc.name    || '');
+    const locText = `${loc.city || ''} ${loc.name || ''} ${loc.country || ''}`.toLowerCase();
+    for (const [badgeId, keywords] of Object.entries(WONDER_KEYWORDS_MAP)) {
+      if (keywords.some((kw) => locText.includes(kw))) {
+        earned.add(badgeId);
+      }
+    }
+  }
 
-    // Great Wall Wanderer – China (Beijing area, Great Wall region, or name match)
-    if (country === 'china' && (
-      city.includes('beijing') || city.includes('badaling') ||
-      city.includes('mutianyu') || name.includes('great wall')
-    )) earned.add('great_wall_wanderer');
-
-    // Petra Pathfinder – Jordan
-    if (country === 'jordan' && (
-      city.includes('petra') || city.includes('wadi musa') ||
-      city.includes('aqaba') || name.includes('petra')
-    )) earned.add('petra_pathfinder');
-
-    // Redeemer Ridge Visitor – Rio de Janeiro, Brazil
-    if (country === 'brazil' && (
-      city.includes('rio de janeiro') || city.includes('rio') ||
-      name.includes('christ the redeemer') || name.includes('corcovado')
-    )) earned.add('redeemer_ridge_visitor');
-
-    // Machu Picchu Explorer – Peru
-    if (country === 'peru' && (
-      city.includes('cusco') || city.includes('cuzco') ||
-      city.includes('aguas calientes') || city.includes('machu picchu') ||
-      name.includes('machu picchu')
-    )) earned.add('machu_picchu_explorer');
-
-    // Chichen Itza Adventurer – Mexico
-    if (country === 'mexico' && (
-      city.includes('chichen itza') || city.includes('valladolid') ||
-      city.includes('merida') || city.includes('cancun') ||
-      name.includes('chichen itza')
-    )) earned.add('chichen_itza_adventurer');
-
-    // Colosseum Challenger – Rome, Italy
-    if (country === 'italy' && (
-      city.includes('rome') || city.includes('roma') ||
-      name.includes('colosseum') || name.includes('coliseum')
-    )) earned.add('colosseum_challenger');
-
-    // Taj Mahal Traveler – Agra, India
-    if (country === 'india' && (
-      city.includes('agra') || name.includes('taj mahal')
-    )) earned.add('taj_mahal_traveler');
+  // Also scan trip-level fields (state, specificAddress, originCity) for wonders
+  for (const trip of trips) {
+    const tripText = [
+      trip.city, trip.name, trip.country,
+      trip.state, trip.specificAddress, trip.originCity,
+    ].filter(Boolean).join(' ').toLowerCase();
+    for (const [badgeId, keywords] of Object.entries(WONDER_KEYWORDS_MAP)) {
+      if (keywords.some((kw) => tripText.includes(kw))) {
+        earned.add(badgeId);
+      }
+    }
   }
 
   return earned;

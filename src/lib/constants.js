@@ -125,6 +125,13 @@ export const SCREENS = {
   HELP_SUPPORT: "HelpSupport",
   BADGES: "Badges",
   BOOKINGS: "Bookings",
+
+  // Travel Tools (match web routes)
+  BUDGET: "Budget",
+  CURRENCY_EXCHANGE: "CurrencyExchange",
+  PACKING_LIST: "PackingList",
+  TIME_ZONES: "TimeZones",
+  TIPPING_GUIDE: "TippingGuide",
 };
 
 // ============================================
@@ -168,6 +175,9 @@ export const RC_PRODUCT_IDS = {
   MONTHLY: "tma_monthly_pro",
   ANNUAL: "tma_annual_pro",
 };
+
+// Visual Crossing Weather API
+export const VISUAL_CROSSING_API_KEY = "LLKSGVETF6PSDX5D5MZ2WXVQW";
 
 // API endpoints (for Stripe and other services)
 export const API_ENDPOINTS = {

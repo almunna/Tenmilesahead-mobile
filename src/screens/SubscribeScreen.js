@@ -46,46 +46,28 @@ const plans = [
     id: "monthly",
     name: "Monthly Pro",
     description: "Perfect for trying out our premium features with full flexibility.",
-    price: "$3.99",
+    price: "$5.99",
     period: "/month",
-    features: [
-      "Smart Trip Management",
-      "Photo Uploader with captions",
-      "Flipbook Viewer",
-      "Flexible Date Editing",
-      "Advanced Exports (CSV, PDF)",
-      "Private Share Links",
-      "Global Reviews",
-      "Multi-Device Access",
-    ],
-    buttonText: "Get Started - $3.99/month",
+    features: [],
+    buttonText: "Get Started - $5.99/month →",
   },
   {
     id: "annual",
     name: "Annual Pro",
     description: "Best value plan with significant savings for committed users.",
-    price: "$39.99",
+    price: "$49.99",
     period: "/year",
-    badge: "Save 17%",
+    badge: "Save 30%",
     highlighted: true,
-    features: [
-      "Smart Trip Management",
-      "Photo Uploader with captions",
-      "Flipbook Viewer",
-      "Flexible Date Editing",
-      "Advanced Exports (CSV, PDF)",
-      "Private Share Links",
-      "Global Reviews",
-      "Multi-Device Access",
-    ],
-    buttonText: "Get Started - $39.99/year",
+    features: [],
+    buttonText: "Get Started - $49.99/year →",
   },
 ];
 
 const PLAN_DETAILS = {
   trial: { name: "Free Trial", price: "$0.00" },
-  monthly: { name: "Monthly Pro", price: "$3.99" },
-  annual: { name: "Annual Pro", price: "$39.99" },
+  monthly: { name: "Monthly Pro", price: "$5.99" },
+  annual: { name: "Annual Pro", price: "$49.99" },
 };
 
 const BENEFITS = [
@@ -93,10 +75,14 @@ const BENEFITS = [
   "Photo Uploader with captions",
   "Flipbook Viewer",
   "Flexible Date Editing",
-  "Advanced Exports (CSV, PDF)",
+  "All travel stats: mileage, states, countries, etc.",
+  "Budgeting",
+  "Packing list",
+  "Currency exchange rates",
   "Private Share Links",
   "Global Reviews",
   "Multi-Device Access",
+  "....and much more.",
 ];
 
 export default function SubscribeScreen({ navigation }) {
@@ -376,7 +362,7 @@ function PricingPlans({ navigation }) {
     if (Platform.OS === "ios" && rcOfferings) {
       const pkg = getRcPackage(plan.id);
       if (pkg) {
-        return `Get Started - ${pkg.product.priceString}${plan.period}`;
+        return `Get Started - ${pkg.product.priceString}${plan.period} →`;
       }
     }
     return plan.buttonText;
@@ -647,13 +633,6 @@ function PricingPlans({ navigation }) {
             <Text style={styles.priceAmount}>{getDisplayPrice(plan)}</Text>
             <Text style={styles.pricePeriod}>{plan.period}</Text>
           </View>
-
-          {plan.features.map((feature, idx) => (
-            <View key={idx} style={styles.featureRow}>
-              <Text style={styles.featureCheck}>✓</Text>
-              <Text style={styles.featureText}>{feature}</Text>
-            </View>
-          ))}
 
           <TouchableOpacity
             style={[

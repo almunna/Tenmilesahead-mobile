@@ -9,6 +9,7 @@ import {
   PanResponder,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
@@ -301,6 +302,7 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
           style={styles.viewButton}
           onPress={() => navigation.navigate(SCREENS.TRIP_DETAIL, { tripId: trip.id })}
         >
+          <Ionicons name="eye-outline" size={scaleFontSize(16)} color={COLORS.white} />
           <Text style={styles.viewButtonText}>View Trip</Text>
         </TouchableOpacity>
 
@@ -308,28 +310,28 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
           style={styles.actionButton}
           onPress={() => onMenu && onMenu(trip)}
         >
-          <Text style={styles.actionIcon}>☰</Text>
+          <Ionicons name="menu-outline" size={scaleFontSize(20)} color={COLORS.white} />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onShare && onShare(trip)}
         >
-          <Text style={styles.actionIcon}>↗</Text>
+          <Ionicons name="share-social-outline" size={scaleFontSize(20)} color={COLORS.white} />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onEdit && onEdit(trip)}
         >
-          <Text style={styles.actionIcon}>✎</Text>
+          <Ionicons name="pencil-outline" size={scaleFontSize(20)} color={COLORS.white} />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={() => onDelete && onDelete(trip)}
         >
-          <Text style={styles.actionIcon}>🗑</Text>
+          <Ionicons name="trash-outline" size={scaleFontSize(20)} color={COLORS.white} />
         </TouchableOpacity>
       </View>
     </View>
@@ -486,19 +488,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  actionIcon: {
-    fontSize: scaleFontSize(16),
-    color: COLORS.white,
-  },
   deleteButton: {
     backgroundColor: COLORS.error,
   },
   viewButton: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: scaleSpacing(6),
     backgroundColor: COLORS.primary,
     paddingVertical: scaleSpacing(SPACING.sm),
     borderRadius: 8,
-    alignItems: "center",
   },
   viewButtonText: {
     color: COLORS.white,

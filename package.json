@@ -44,7 +44,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "babel-preset-expo": "^54.0.9"
+    "babel-preset-expo": "^54.0.9",
+    "react-native-svg-transformer": "^1.5.3"
   },
   "private": true
 }

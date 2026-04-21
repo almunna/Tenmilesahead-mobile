@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -28,9 +28,7 @@ import { useAuth } from "../AuthProvider";
 import ModalShell from "./ModalShell";
 import Dropdown from "../Dropdown";
 import DatePicker from "../DatePicker";
-import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../../lib/constants";
-import { COUNTRIES, getStates } from "../../lib/geo";
-import { sortAZWithOtherLast } from "../../lib/utils";
+import { COLORS, SPACING, scaleFontSize, scaleSpacing, API_BASE_URL } from "../../lib/constants";
 
 const TRANSPORT_OPTIONS = [
   "Airplane",
@@ -97,6 +95,11 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
   const [captions, setCaptions] = useState({});
   const [coverIndex, setCoverIndex] = useState(null);
 
+  // Address autocomplete
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [addressLoading, setAddressLoading]         = useState(false);
+  const searchTimer = useRef(null);
+
   const isCruise = form.originTransportationType === "Cruise";
   const cruiseLineValue =
     form.cruiseLine === OTHER_CRUISE_LINE
@@ -109,17 +112,7 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
   const canCreate =
     !!form.name && isCruiseComplete && !!form.startDate && !!form.endDate;
 
-  const sortedCountries = useMemo(() => {
-    const withOther = new Set([...COUNTRIES, "Other", "Others"]);
-    return sortAZWithOtherLast(Array.from(withOther), "United States");
-  }, []);
-
-  const availableOriginStates = useMemo(
-    () => sortAZWithOtherLast(getStates(form.originCountry)),
-    [form.originCountry]
-  );
-
-  const allMedia = useMemo(() => [...photos, ...videos], [photos, videos]);
+  const allMedia = [...photos, ...videos];
 
   // Set first photo as cover by default
   useEffect(() => {
@@ -173,7 +166,7 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      quality: 0.8,
+      quality: 1,
     });
 
     if (!result.canceled && result.assets) {
@@ -206,6 +199,83 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
     // Update cover if needed
     if (coverIndex === index) {
       setCoverIndex(null);
+    }
+  }
+
+  // ── Address autocomplete (Google Places API) ─────────────────────────────
+  const PLACES_KEY = "AIzaSyCYnlpsu8WOAu2Z0sW_ngZgxxW8UNbOwbw";
+
+  function handleAddressInput(text) {
+    setForm((prev) => ({ ...prev, originAddress: text }));
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (text.trim().length < 2) {
+      setAddressSuggestions([]);
+      return;
+    }
+    searchTimer.current = setTimeout(() => fetchSuggestions(text), 400);
+  }
+
+  async function fetchSuggestions(query) {
+    setAddressLoading(true);
+    try {
+      // No `types` filter so cities, addresses and regions all match
+      const url =
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+        `?input=${encodeURIComponent(query)}` +
+        `&key=${PLACES_KEY}` +
+        `&language=en`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status === "OK") {
+        setAddressSuggestions(data.predictions);
+      } else {
+        setAddressSuggestions([]);
+      }
+    } catch {
+      setAddressSuggestions([]);
+    } finally {
+      setAddressLoading(false);
+    }
+  }
+
+  async function selectSuggestion(item) {
+    setForm((prev) => ({ ...prev, originAddress: item.description }));
+    setAddressSuggestions([]);
+
+    // Fetch full address components via Place Details
+    try {
+      const url =
+        `https://maps.googleapis.com/maps/api/place/details/json` +
+        `?place_id=${item.place_id}` +
+        `&fields=address_components,formatted_address` +
+        `&key=${PLACES_KEY}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.status !== "OK") return;
+
+      const components = data.result.address_components || [];
+      const get = (type) =>
+        components.find((c) => c.types.includes(type))?.long_name || "";
+
+      const streetNum   = get("street_number");
+      const route       = get("route");
+      const addressLine = [streetNum, route].filter(Boolean).join(" ")
+        || data.result.formatted_address
+        || item.description;
+
+      const city    = get("locality") || get("sublocality_level_1") || get("postal_town") || get("administrative_area_level_2");
+      const state   = get("administrative_area_level_1");
+      const country = get("country");
+
+      setForm((prev) => ({
+        ...prev,
+        originAddress: addressLine,
+        originCity:    city,
+        originState:   state,
+        originCountry: country,
+      }));
+    } catch {
+      // Details failed — address field keeps the description; city/state/country editable manually
     }
   }
 
@@ -247,6 +317,7 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
       // Upload media
       let chosenCoverMediaId = null;
       let firstImageMediaId = null;
+      const idToken = await user.getIdToken();
 
       for (let i = 0; i < allMedia.length; i++) {
         const asset = allMedia[i];
@@ -255,33 +326,51 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
         const kind = isImage ? "image" : isVideo ? "video" : "other";
         if (kind === "other") continue;
 
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
         const mediaRef = doc(collection(db, "trips", tripRef.id, "media"));
         const mediaId = mediaRef.id;
 
-        const safeName = (asset.fileName || `media_${Date.now()}.jpg`).replace(
-          /[^\w.\-]+/g,
-          "_"
-        );
-        const storagePath = `trip_media/${user.uid}/${tripRef.id}/${mediaId}/${safeName}`;
-        const sref = storageRef(storage, storagePath);
+        let downloadURL = "";
+        let storagePath = "";
 
-        await uploadBytes(sref, blob);
-        const downloadURL = await getDownloadURL(sref);
+        if (isImage) {
+          const formData = new FormData();
+          formData.append("file", {
+            uri: asset.uri,
+            name: asset.fileName || `photo_${Date.now()}.jpg`,
+            type: asset.mimeType || "image/jpeg",
+          });
+          formData.append("ownerId", user.uid);
+          formData.append("tripId", tripRef.id);
+          formData.append("idToken", idToken);
+          const res = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error ?? `Upload failed (${res.status})`);
+          }
+          ({ downloadURL, storagePath } = await res.json());
+        } else {
+          // Video: direct Firebase Storage upload
+          const safeName = (asset.fileName || `media_${Date.now()}.mp4`).replace(/[^\w.\-]+/g, "_");
+          storagePath = `trip_media/${user.uid}/${tripRef.id}/${mediaId}/${safeName}`;
+          const sref = storageRef(storage, storagePath);
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          await uploadBytes(sref, blob);
+          downloadURL = await getDownloadURL(sref);
+        }
 
         await setDoc(mediaRef, {
           tripId: tripRef.id,
+          ownerId: user.uid,
           type: kind,
           storagePath,
           downloadURL,
           createdAt: Date.now(),
-          takenAt: Date.now(),
+          takenAt: asset.modificationTime || Date.now(),
           caption: captions[i] || "",
-          fileName: asset.fileName || safeName,
-          size: asset.fileSize || 0,
-          contentType: asset.type || "image/jpeg",
         });
 
         if (isImage) {
@@ -454,60 +543,107 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Starting From</Text>
+        <Text style={styles.sectionTitle}>Beginning</Text>
 
-        <Dropdown
-          label="Origin Country"
-          value={form.originCountry}
-          options={sortedCountries}
-          onSelect={(value) =>
-            setForm({ ...form, originCountry: value, originState: "" })
-          }
-          placeholder="Select origin country"
-          searchable
-        />
-
-        <Dropdown
-          label="Origin State / Province"
-          value={form.originState}
-          options={availableOriginStates}
-          onSelect={(value) => setForm({ ...form, originState: value })}
-          placeholder="Select or enter state/province"
-          searchable
-          allowCustom
-        />
-
+        {/* 1. Beginning Address — autocomplete */}
         <View style={styles.section}>
-          <Text style={styles.label}>Origin City</Text>
+          <Text style={styles.label}>Beginning Address</Text>
+          <View style={styles.autocompleteWrapper}>
+            <View style={styles.autocompleteInputRow}>
+              <TextInput
+                style={[styles.input, styles.autocompleteInput]}
+                placeholder="Start typing your address…"
+                placeholderTextColor={COLORS.muted}
+                value={form.originAddress}
+                onChangeText={handleAddressInput}
+                autoCorrect={false}
+                autoCapitalize="words"
+                returnKeyType="search"
+              />
+              {addressLoading && (
+                <ActivityIndicator
+                  size="small"
+                  color={COLORS.primary}
+                  style={styles.autocompleteSpinner}
+                />
+              )}
+              {form.originAddress.length > 0 && !addressLoading && (
+                <TouchableOpacity
+                  style={styles.autocompleteClear}
+                  onPress={() => {
+                    setForm((prev) => ({
+                      ...prev,
+                      originAddress: "",
+                      originCity: "",
+                      originState: "",
+                      originCountry: "",
+                    }));
+                    setAddressSuggestions([]);
+                  }}
+                >
+                  <Text style={styles.autocompleteClearText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {addressSuggestions.length > 0 && (
+              <View style={styles.suggestionsList}>
+                {addressSuggestions.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.place_id ?? i}
+                    style={[
+                      styles.suggestionItem,
+                      i < addressSuggestions.length - 1 && styles.suggestionBorder,
+                    ]}
+                    onPress={() => selectSuggestion(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.suggestionIcon}>📍</Text>
+                    <Text style={styles.suggestionText} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 2. Beginning City — auto-filled, editable */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Beginning City</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g., St. Augustine"
+            placeholder="Auto-filled from address"
             placeholderTextColor={COLORS.muted}
             value={form.originCity}
             onChangeText={(text) => setForm({ ...form, originCity: text })}
           />
         </View>
 
+        {/* 3. Beginning State / Province — auto-filled, editable */}
         <View style={styles.section}>
-          <Text style={styles.label}>Address</Text>
+          <Text style={styles.label}>Beginning State / Province</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g., 123 Main Street, Suite 100"
+            placeholder="Auto-filled from address"
             placeholderTextColor={COLORS.muted}
-            value={form.originAddress}
-            onChangeText={(text) => setForm({ ...form, originAddress: text })}
+            value={form.originState}
+            onChangeText={(text) => setForm({ ...form, originState: text })}
           />
         </View>
 
-        <Dropdown
-          label="Mode of Transportation"
-          value={form.originTransportationType}
-          options={TRANSPORT_OPTIONS}
-          onSelect={(value) =>
-            setForm({ ...form, originTransportationType: value })
-          }
-          placeholder="Select transportation"
-        />
+        {/* 4. Beginning Country — auto-filled, editable */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Beginning Country</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Auto-filled from address"
+            placeholderTextColor={COLORS.muted}
+            value={form.originCountry}
+            onChangeText={(text) => setForm({ ...form, originCountry: text })}
+          />
+        </View>
 
         {isCruise && (
           <>
@@ -866,5 +1002,65 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+
+  // Address autocomplete
+  autocompleteWrapper: {
+    position: "relative",
+    zIndex: 10,
+  },
+  autocompleteInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  autocompleteInput: {
+    flex: 1,
+  },
+  autocompleteSpinner: {
+    position: "absolute",
+    right: scaleSpacing(12),
+  },
+  autocompleteClear: {
+    position: "absolute",
+    right: scaleSpacing(12),
+    padding: scaleSpacing(4),
+  },
+  autocompleteClearText: {
+    fontSize: scaleFontSize(12),
+    color: COLORS.muted,
+  },
+  suggestionsList: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: scaleSpacing(4),
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: scaleSpacing(SPACING.sm),
+    paddingHorizontal: scaleSpacing(SPACING.md),
+    gap: scaleSpacing(SPACING.xs),
+  },
+  suggestionBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  suggestionIcon: {
+    fontSize: scaleFontSize(14),
+    marginTop: scaleSpacing(1),
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: scaleFontSize(13),
+    color: COLORS.foreground,
+    lineHeight: scaleFontSize(18),
   },
 });

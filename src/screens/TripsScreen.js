@@ -9,9 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import CalendarPickerModal from "../components/CalendarPickerModal";
 import {
   collection,
   query,
@@ -266,23 +265,21 @@ function TripsInner({ navigation }) {
         </View>
       )}
 
-      {showStartPicker && (
-        <DateTimePicker
-          value={startDate || new Date()}
-          mode="date"
-          display="default"
-          onChange={handleStartDateChange}
-        />
-      )}
+      <CalendarPickerModal
+        visible={showStartPicker}
+        value={startDate || new Date()}
+        title="Filter Start Date"
+        onSelect={(d) => setStartDate(d)}
+        onClose={() => setShowStartPicker(false)}
+      />
 
-      {showEndPicker && (
-        <DateTimePicker
-          value={endDate || new Date()}
-          mode="date"
-          display="default"
-          onChange={handleEndDateChange}
-        />
-      )}
+      <CalendarPickerModal
+        visible={showEndPicker}
+        value={endDate || startDate || new Date()}
+        title="Filter End Date"
+        onSelect={(d) => setEndDate(d)}
+        onClose={() => setShowEndPicker(false)}
+      />
 
       {filteredTrips.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -432,13 +429,6 @@ function TripsInner({ navigation }) {
         onClose={() => setActivitiesTrip(null)}
         title="Activities"
         subcollection="activities"
-        extraLeft={[
-          {
-            key: "transportationType",
-            label: "Mode of Transportation",
-            options: TRANSPORT_OPTIONS,
-          },
-        ]}
       />
 
       <PlaceModal
@@ -447,13 +437,6 @@ function TripsInner({ navigation }) {
         onClose={() => setAccommodationsTrip(null)}
         title="Accommodations"
         subcollection="accommodations"
-        extraLeft={[
-          {
-            key: "transportationType",
-            label: "Mode of Transportation",
-            options: TRANSPORT_OPTIONS,
-          },
-        ]}
       />
 
       <PlaceModal
