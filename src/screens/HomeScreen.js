@@ -19,6 +19,8 @@ import {
   limit,
   onSnapshot,
   getDocs,
+  getDoc,
+  updateDoc,
   deleteDoc,
   doc,
 } from "firebase/firestore";
@@ -325,205 +327,171 @@ export default function HomeScreen() {
         const transportCounts = {};
         const accommodationCounts = {};
 
-        for (const t of filteredTrips) {
+        // Exclude future trips — matches web's `t.startDate <= todayStr` filter
+        const todayStr = new Date().toISOString().split("T")[0];
+        const pastTrips = filteredTrips.filter(
+          (t) => !t.startDate || t.startDate <= todayStr
+        );
 
-          // Calculate days for this trip
-          if (t.startDate && t.endDate) {
-            const start = new Date(t.startDate);
-            const end = new Date(t.endDate);
-            const days =
-              Math.ceil(
-                (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-              ) + 1;
-            totalDays += days;
-          }
+        // PHASE 1: Fetch all subcollections in parallel — also collect destinations
+        // data now so we don't need extra Firestore reads during miles computation.
+        const tripDestinationsMap = new Map();
 
-          // Track locations (only destination locations, not origin)
-          if (t.country) cSet.add(t.country);
-          // Only count US states for the "States Visited (US)" stat
-          const isUSA =
-            t.country &&
-            ["united states", "usa", "us", "united states of america"].includes(
-              t.country.toLowerCase().trim()
-            );
-          if (t.state && t.state.trim() && isUSA) sSet.add(t.state.trim());
-          if (t.city) citySet.add(`${t.city}|${t.country || ""}`);
-
-          // Track transportation from main trip
-          if (t.originTransportationType) {
-            transportCounts[t.originTransportationType] =
-              (transportCounts[t.originTransportationType] || 0) + 1;
-          }
-
-          // Destinations subcollection - fetch and sort by startDate
-          const destSnap = await getDocs(
-            collection(db, "trips", t.id, "destinations")
-          );
-          const destinations = [];
-          destSnap.forEach((d) => {
-            const dest = d.data();
-            destinations.push(dest);
-            if (dest.country) cSet.add(dest.country);
-            const destIsUSA =
-              dest.country &&
-              [
-                "united states",
-                "usa",
-                "us",
-                "united states of america",
-              ].includes(dest.country.toLowerCase().trim());
-            if (dest.state && dest.state.trim() && destIsUSA)
-              sSet.add(dest.state.trim());
-            if (dest.city) citySet.add(`${dest.city}|${dest.country || ""}`);
-            if (
-              dest.transportationType &&
-              dest.transportationType !== "Cruise"
-            ) {
-              transportCounts[dest.transportationType] =
-                (transportCounts[dest.transportationType] || 0) + 1;
+        await Promise.all(
+          pastTrips.map(async (t) => {
+            if (t.startDate && t.endDate) {
+              const start = new Date(t.startDate);
+              const end = new Date(t.endDate);
+              const days =
+                Math.ceil(
+                  (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                ) + 1;
+              totalDays += days;
             }
-          });
 
-          // Sort destinations by startDate for chronological ordering
-          destinations.sort((a, b) => {
-            if (a.startDate && b.startDate) {
-              return (
-                new Date(a.startDate).getTime() -
-                new Date(b.startDate).getTime()
+            // Use saved totalMiles for now — missing values filled in phase 2
+            totalMiles += t.totalMiles ?? 0;
+
+            if (t.country) cSet.add(t.country);
+            const isUSA =
+              t.country &&
+              ["united states", "usa", "us", "united states of america"].includes(
+                t.country.toLowerCase().trim()
               );
+            if (t.state && t.state.trim() && isUSA) sSet.add(t.state.trim());
+            if (t.city) citySet.add(`${t.city}|${t.country || ""}`);
+            if (t.originTransportationType) {
+              transportCounts[t.originTransportationType] =
+                (transportCounts[t.originTransportationType] || 0) + 1;
             }
-            return 0;
-          });
 
-          // Build chronological list of all locations for this trip
-          // Start with main trip destination (using trip start date)
-          const allLocations = [];
+            const [destSnap, actSnap, accomSnap, restaurantSnap, mediaSnap] =
+              await Promise.all([
+                getDocs(collection(db, "trips", t.id, "destinations")),
+                getDocs(collection(db, "trips", t.id, "activities")),
+                getDocs(collection(db, "trips", t.id, "accommodations")),
+                getDocs(collection(db, "trips", t.id, "restaurants")),
+                getDocs(collection(db, "trips", t.id, "media")),
+              ]);
 
-          // Add main trip destination with trip's start date
-          if (t.city && t.country) {
-            allLocations.push({
-              city: t.city,
-              state: t.state,
-              country: t.country,
-              date: t.startDate || "",
+            const destinations = [];
+            destSnap.forEach((d) => {
+              const dest = d.data();
+              destinations.push(dest);
+              if (dest.country) cSet.add(dest.country);
+              const destIsUSA =
+                dest.country &&
+                ["united states", "usa", "us", "united states of america"].includes(
+                  dest.country.toLowerCase().trim()
+                );
+              if (dest.state && dest.state.trim() && destIsUSA)
+                sSet.add(dest.state.trim());
+              if (dest.city) citySet.add(`${dest.city}|${dest.country || ""}`);
+              if (dest.transportationType && dest.transportationType !== "Cruise") {
+                transportCounts[dest.transportationType] =
+                  (transportCounts[dest.transportationType] || 0) + 1;
+              }
             });
-          }
+            // Store for phase 2 miles computation (no extra reads needed)
+            tripDestinationsMap.set(t.id, destinations);
 
-          // Add all destinations from subcollection
-          for (const dest of destinations) {
-            if (dest.city && dest.country && dest.startDate) {
-              allLocations.push({
-                city: dest.city,
-                state: dest.state,
-                country: dest.country,
-                date: dest.startDate,
-              });
-            }
-          }
+            actSnap.forEach((a) => {
+              const act = a.data();
+              if (act.transportationType && act.transportationType !== "Cruise") {
+                transportCounts[act.transportationType] =
+                  (transportCounts[act.transportationType] || 0) + 1;
+              }
+            });
 
-          // Sort all locations chronologically by date
-          allLocations.sort((a, b) => {
-            if (!a.date || !b.date) return 0;
-            return new Date(a.date).getTime() - new Date(b.date).getTime();
-          });
+            accomSnap.forEach((a) => {
+              const acc = a.data();
+              if (acc.onShip) {
+                accommodationCounts["Cruise"] =
+                  (accommodationCounts["Cruise"] || 0) + 1;
+              } else if (acc.accommodationType) {
+                accommodationCounts[acc.accommodationType] =
+                  (accommodationCounts[acc.accommodationType] || 0) + 1;
+              }
+              if (acc.transportationType && acc.transportationType !== "Cruise") {
+                transportCounts[acc.transportationType] =
+                  (transportCounts[acc.transportationType] || 0) + 1;
+              }
+            });
 
-          // Calculate distance: origin → first location → second location → etc.
-          if (allLocations.length > 0) {
-            // Distance from origin to first chronological location
-            const firstLoc = allLocations[0];
-            const originToFirst = await calculateDistance(
-              t.originCity,
-              t.originState,
-              t.originCountry,
-              firstLoc.city,
-              firstLoc.state,
-              firstLoc.country
-            );
-            totalMiles += originToFirst;
+            restaurantSnap.forEach((r) => {
+              const rest = r.data();
+              if (rest.transportationType && rest.transportationType !== "Cruise") {
+                transportCounts[rest.transportationType] =
+                  (transportCounts[rest.transportationType] || 0) + 1;
+              }
+            });
 
-            // Distance between consecutive locations
-            for (let i = 1; i < allLocations.length; i++) {
-              const prevLoc = allLocations[i - 1];
-              const currLoc = allLocations[i];
-              const segmentDistance = await calculateDistance(
-                prevLoc.city,
-                prevLoc.state,
-                prevLoc.country,
-                currLoc.city,
-                currLoc.state,
-                currLoc.country
-              );
-              totalMiles += segmentDistance;
-            }
-          }
+            mediaSnap.forEach((m) => {
+              const mm = m.data();
+              if (mm.type === "image") imgTotal += 1;
+            });
+          })
+        );
 
-          // Activities subcollection
-          const actSnap = await getDocs(
-            collection(db, "trips", t.id, "activities")
-          );
-          actSnap.forEach((a) => {
-            const act = a.data();
-            if (act.transportationType && act.transportationType !== "Cruise") {
-              transportCounts[act.transportationType] =
-                (transportCounts[act.transportationType] || 0) + 1;
-            }
-          });
-
-          // Accommodations subcollection
-          const accomSnap = await getDocs(
-            collection(db, "trips", t.id, "accommodations")
-          );
-          accomSnap.forEach((a) => {
-            const acc = a.data();
-            if (acc.onShip) {
-              accommodationCounts["Cruise"] =
-                (accommodationCounts["Cruise"] || 0) + 1;
-            } else if (acc.accommodationType) {
-              accommodationCounts[acc.accommodationType] =
-                (accommodationCounts[acc.accommodationType] || 0) + 1;
-            }
-            if (acc.transportationType && acc.transportationType !== "Cruise") {
-              transportCounts[acc.transportationType] =
-                (transportCounts[acc.transportationType] || 0) + 1;
-            }
-          });
-
-          // Restaurants subcollection
-          const restaurantSnap = await getDocs(
-            collection(db, "trips", t.id, "restaurants")
-          );
-          restaurantSnap.forEach((r) => {
-            const rest = r.data();
-            if (
-              rest.transportationType &&
-              rest.transportationType !== "Cruise"
-            ) {
-              transportCounts[rest.transportationType] =
-                (transportCounts[rest.transportationType] || 0) + 1;
-            }
-          });
-
-          // Media (photos)
-          const mediaSnap = await getDocs(
-            collection(db, "trips", t.id, "media")
-          );
-          mediaSnap.forEach((m) => {
-            const mm = m.data();
-            if (mm.type === "image") imgTotal += 1;
-          });
-        }
-
-        setStats({
-          totalTrips: filteredTrips.length,
+        // Show stats immediately — no geocoding needed yet
+        const baseStats = {
+          totalTrips: pastTrips.length,
           daysExplored: totalDays,
           photosCaptured: imgTotal,
-          totalMiles: totalMiles,
+          totalMiles: Math.round(totalMiles),
           countriesVisited: cSet.size,
           statesVisited: sSet.size,
           citiesVisited: citySet.size,
           transportationCounts: transportCounts,
           accommodationCounts: accommodationCounts,
-        });
+        };
+        setStats(baseStats);
+
+        // PHASE 2: Compute missing miles in background using already-fetched destinations.
+        // Updates totalMiles in stats once geocoding resolves.
+        const tripsNeedingMiles = pastTrips.filter((t) => !t.totalMiles);
+        if (tripsNeedingMiles.length > 0) {
+          let additionalMiles = 0;
+          for (const t of tripsNeedingMiles) {
+            try {
+              const destinations = tripDestinationsMap.get(t.id) || [];
+              destinations.sort((a, b) =>
+                a.startDate && b.startDate
+                  ? new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+                  : 0
+              );
+              const allLocations = [];
+              if (t.city && t.country)
+                allLocations.push({ city: t.city, state: t.state, country: t.country, date: t.startDate || "" });
+              for (const dest of destinations) {
+                if (dest.city && dest.country && dest.startDate)
+                  allLocations.push({ city: dest.city, state: dest.state, country: dest.country, date: dest.startDate });
+              }
+              allLocations.sort((a, b) =>
+                !a.date || !b.date ? 0 : new Date(a.date).getTime() - new Date(b.date).getTime()
+              );
+              let tripMiles = 0;
+              if (allLocations.length > 0) {
+                const firstLoc = allLocations[0];
+                tripMiles += await calculateDistance(t.originCity, t.originState, t.originCountry, firstLoc.city, firstLoc.state, firstLoc.country);
+                for (let i = 1; i < allLocations.length; i++) {
+                  const p = allLocations[i - 1], c = allLocations[i];
+                  tripMiles += await calculateDistance(p.city, p.state, p.country, c.city, c.state, c.country);
+                }
+              }
+              additionalMiles += tripMiles;
+              if (tripMiles > 0) {
+                updateDoc(doc(db, "trips", t.id), { totalMiles: Math.round(tripMiles) }).catch(() => {});
+              }
+            } catch {}
+          }
+          if (additionalMiles > 0) {
+            setStats((prev) => ({
+              ...prev,
+              totalMiles: prev.totalMiles + Math.round(additionalMiles),
+            }));
+          }
+        }
       } catch (error) {
       }
     };

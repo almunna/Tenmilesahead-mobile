@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,6 +10,157 @@ import {
 } from "react-native";
 import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../lib/constants";
 import { TIPPING_DATA, CULTURE_CONFIG, FEATURED_COUNTRIES, searchCountries } from "../lib/tippingData";
+
+// ── Country ISO code lookup ───────────────────────────────────────────────────
+const COUNTRY_CODES = {
+  "United States": "us", "Canada": "ca", "Mexico": "mx", "Costa Rica": "cr",
+  "Jamaica": "jm", "Dominican Republic": "do", "Bahamas": "bs", "Cuba": "cu",
+  "Brazil": "br", "Argentina": "ar", "Colombia": "co", "Peru": "pe", "Chile": "cl",
+  "United Kingdom": "gb", "France": "fr", "Germany": "de", "Italy": "it",
+  "Spain": "es", "Portugal": "pt", "Netherlands": "nl", "Switzerland": "ch",
+  "Austria": "at", "Greece": "gr", "Turkey": "tr", "Czech Republic": "cz",
+  "Hungary": "hu", "Poland": "pl", "Sweden": "se", "Norway": "no",
+  "Denmark": "dk", "Ireland": "ie", "Japan": "jp", "China": "cn",
+  "Thailand": "th", "Vietnam": "vn", "Indonesia": "id", "Philippines": "ph",
+  "India": "in", "Singapore": "sg", "Malaysia": "my", "South Korea": "kr",
+  "Taiwan": "tw", "Cambodia": "kh", "Nepal": "np", "Sri Lanka": "lk",
+  "United Arab Emirates": "ae", "Egypt": "eg", "Morocco": "ma",
+  "South Africa": "za", "Kenya": "ke", "Tanzania": "tz", "Israel": "il",
+  "Jordan": "jo", "Australia": "au", "New Zealand": "nz", "Fiji": "fj",
+  "Maldives": "mv", "Macau": "mo", "Madeira": "pt", "Mauritius": "mu",
+  "Malta (General)": "mt", "Madagascar (Coastal)": "mg",
+  "Mahé (Seychelles)": "sc", "Montenegro": "me", "Croatia": "hr",
+  "Slovenia": "si", "Cyprus": "cy", "Bulgaria": "bg",
+};
+
+const KEYWORD_CODES = [
+  ["Japan", "jp"], ["Okinawa", "jp"], ["Miyako", "jp"], ["Nagasaki", "jp"],
+  ["Onna Village", "jp"], ["Omishima", "jp"], ["Okinoerabu", "jp"],
+  ["Mexico", "mx"], ["Playa del Carmen", "mx"], ["Riviera Maya", "mx"],
+  ["Tulum", "mx"], ["Cancun", "mx"], ["Mazatlán", "mx"], ["Mazatlan", "mx"],
+  ["Manzanillo", "mx"], ["Riviera Nayarit", "mx"], ["Quintana Roo", "mx"],
+  ["Playa Mujeres", "mx"], ["Playa Samara", "mx"], ["Mérida", "mx"],
+  ["Pacific Coast (Mexico", "mx"],
+  ["Italy", "it"], ["Portofino", "it"], ["Positano", "it"], ["Polignano", "it"],
+  ["Rimini", "it"], ["Ravello", "it"], ["Puglia", "it"], ["Olbia", "it"],
+  ["Amalfi", "it"], ["Sardinia", "it"], ["Sicily", "it"], ["Liguria", "it"],
+  ["Naples Coast", "it"],
+  ["Spain", "es"], ["Mallorca", "es"], ["Majorca", "es"], ["Menorca", "es"],
+  ["Ibiza", "es"], ["Formentera", "es"], ["Marbella", "es"], ["Malaga", "es"],
+  ["Playa Blanca", "es"], ["Lanzarote", "es"], ["Costa del Sol", "es"],
+  ["Pontevedra", "es"], ["Ribadesella", "es"],
+  ["France", "fr"], ["Nice", "fr"], ["Cannes", "fr"], ["French Riviera", "fr"],
+  ["Quiberon", "fr"], ["Île de Ré", "fr"], ["Île d'Oléron", "fr"],
+  ["French Polynesia", "pf"], ["Moorea", "pf"], ["Raiatea", "pf"],
+  ["Greece", "gr"], ["Mykonos", "gr"], ["Santorini", "gr"], ["Rhodes", "gr"],
+  ["Rodos", "gr"], ["Milos", "gr"], ["Paros", "gr"], ["Naxos", "gr"],
+  ["Kefalonia", "gr"], ["Karpathos", "gr"], ["Halkidiki", "gr"],
+  ["Kavala", "gr"], ["Kassandra", "gr"],
+  ["Portugal", "pt"], ["Algarve", "pt"], ["Azores", "pt"], ["Porto Santo", "pt"],
+  ["Ponta Delgada", "pt"], ["Pico Island", "pt"], ["Quarteira", "pt"],
+  ["Australia", "au"], ["Kangaroo Island", "au"], ["Noosa", "au"],
+  ["Palm Cove", "au"], ["Ningaloo", "au"], ["Nelson Bay", "au"],
+  ["Melbourne Coast", "au"], ["Perth Coast", "au"], ["Port Douglas", "au"],
+  ["Northern Beaches (Sydney)", "au"], ["Noosa", "au"],
+  ["New Zealand", "nz"], ["Raglan", "nz"], ["North Island (New Zealand", "nz"],
+  ["Indonesia", "id"], ["Bali", "id"], ["Padangbai", "id"], ["Raja Ampat", "id"],
+  ["Philippines", "ph"], ["Palawan", "ph"], ["Panglao", "ph"],
+  ["Manila Bay", "ph"], ["Marinduque", "ph"], ["Pagudpud", "ph"],
+  ["Thailand", "th"], ["Phuket", "th"], ["Pattaya", "th"], ["Phang Nga", "th"],
+  ["Rayong", "th"],
+  ["Ireland", "ie"], ["Inch Beach", "ie"], ["Inishbofin", "ie"],
+  ["Inverness", "gb"], ["Scotland", "gb"], ["Northern Ireland", "gb"],
+  ["Northumberland", "gb"], ["Orkney", "gb"], ["North Berwick", "gb"],
+  ["Moray Firth", "gb"], ["Oban", "gb"], ["Plymouth Coast", "gb"],
+  ["California", "us"], ["Florida", "us"], ["Hawaii", "us"], ["Oahu", "us"],
+  ["Kauai", "us"], ["Maui", "us"], ["Big Island", "us"],
+  ["North Carolina", "us"], ["Oregon Coast", "us"], ["Martha's Vineyard", "us"],
+  ["Nantucket", "us"], ["Monterey", "us"], ["Morro Bay", "us"],
+  ["Newport (Rhode Island)", "us"], ["Nags Head", "us"],
+  ["Rehoboth Beach", "us"], ["Outer Banks", "us"], ["Miami Beach", "us"],
+  ["Palm Beach (Florida)", "us"], ["New Smyrna Beach", "us"],
+  ["New Brunswick Coast", "ca"], ["Newfoundland", "ca"],
+  ["Ontario Great Lakes", "ca"], ["Quebec Maritime", "ca"],
+  ["Egypt", "eg"], ["Red Sea", "eg"], ["Ras Sudr", "eg"],
+  ["Morocco (Atlantic", "ma"], ["Agadir", "ma"],
+  ["Kenya", "ke"], ["Mombasa", "ke"], ["Diani", "ke"],
+  ["Tanzania", "tz"], ["Zanzibar", "tz"], ["Pemba Island", "tz"],
+  ["South Africa", "za"], ["Plettenberg", "za"], ["Port Elizabeth", "za"],
+  ["Mozambique", "mz"], ["Quelimane", "mz"], ["Quilalea", "mz"],
+  ["Seychelles", "sc"],
+  ["Mauritius", "mu"],
+  ["Reunion Island", "re"], ["Reunion", "re"],
+  ["UAE", "ae"], ["Dubai", "ae"], ["Ras Al Khaimah", "ae"], ["Abu Dhabi", "ae"],
+  ["Oman", "om"],
+  ["Jordan", "jo"], ["Aqaba", "jo"],
+  ["Israel", "il"],
+  ["Croatia", "hr"], ["Dubrovnik", "hr"], ["Opatija", "hr"], ["Rovinj", "hr"],
+  ["Montenegro", "me"], ["Kotor", "me"], ["Budva", "me"],
+  ["Slovenia", "si"], ["Piran", "si"],
+  ["Cyprus", "cy"], ["North Cyprus", "cy"],
+  ["Bulgaria", "bg"],
+  ["Barbados", "bb"], ["Oistins", "bb"],
+  ["Jamaica", "jm"], ["Negril", "jm"], ["Ocho Rios", "jm"],
+  ["Port Antonio", "jm"], ["Runaway Bay", "jm"],
+  ["Bahamas", "bs"], ["Nassau", "bs"],
+  ["Dominican Republic", "do"], ["Punta Cana", "do"],
+  ["St. Lucia", "lc"], ["Marigot Bay", "lc"],
+  ["Montserrat", "ms"], ["Martinique", "mq"],
+  ["Nevis", "kn"], ["Port Zante", "kn"],
+  ["Brazil", "br"], ["Rio de Janeiro", "br"], ["Natal (Brazil)", "br"],
+  ["Porto Seguro", "br"], ["Paraty", "br"],
+  ["Argentina", "ar"], ["Patagonia Coastal Gateways (Argentina)", "ar"],
+  ["Punta del Este", "uy"],
+  ["Ecuador", "ec"], ["Manabi", "ec"],
+  ["Peru", "pe"], ["Paracas", "pe"],
+  ["Honduras", "hn"], ["Roatán", "hn"],
+  ["Belize", "bz"], ["Placencia", "bz"],
+  ["Costa Rica", "cr"], ["Puntarenas", "cr"], ["Playa Hermosa (Costa Rica)", "cr"],
+  ["Vietnam", "vn"], ["Da Nang", "vn"], ["Nha Trang", "vn"],
+  ["India", "in"], ["Goa", "in"], ["Kanyakumari", "in"], ["Kerala", "in"],
+  ["Malaysia", "my"], ["Penang", "my"], ["Perhentian", "my"],
+  ["Taiwan", "tw"], ["Kaohsiung", "tw"], ["Penghu", "tw"],
+  ["South Korea", "kr"], ["Jeju", "kr"], ["Busan", "kr"],
+  ["China", "cn"], ["Qingdao", "cn"], ["Qionghai", "cn"], ["Hainan", "cn"],
+  ["Macau", "mo"],
+  ["Singapore", "sg"],
+  ["Cambodia", "kh"],
+  ["Sri Lanka", "lk"],
+  ["Nepal", "np"],
+  ["Maldives", "mv"],
+  ["Fiji", "fj"], ["Mamanuca Islands (Fiji)", "fj"],
+  ["Cook Islands", "ck"], ["Rarotonga", "ck"],
+  ["Vanuatu", "vu"], ["Port Vila", "vu"],
+  ["Micronesia", "fm"], ["Pohnpei", "fm"],
+  ["Northern Mariana Islands", "mp"],
+  ["New Caledonia", "nc"],
+  ["Niue", "nu"],
+  ["Greenland", "gl"], ["Qaqortoq", "gl"],
+  ["Germany", "de"], ["Rügen", "de"],
+  ["Sweden", "se"], ["Norway", "no"], ["Denmark", "dk"],
+  ["Poland", "pl"], ["Hungary", "hu"], ["Czech Republic", "cz"],
+  ["Switzerland", "ch"], ["Austria", "at"], ["Netherlands", "nl"],
+];
+
+function getCountryCode(countryName) {
+  if (COUNTRY_CODES[countryName]) return COUNTRY_CODES[countryName];
+  for (const [keyword, code] of KEYWORD_CODES) {
+    if (countryName.includes(keyword)) return code;
+  }
+  return null;
+}
+
+function FlagImage({ country, size = 32 }) {
+  const code = getCountryCode(country);
+  if (!code) return <Text style={{ fontSize: size * 0.9 }}>🌍</Text>;
+  return (
+    <Image
+      source={{ uri: `https://flagcdn.com/w80/${code}.png` }}
+      style={{ width: size * 1.4, height: size, borderRadius: 3 }}
+      resizeMode="cover"
+    />
+  );
+}
 
 const FEATURED = TIPPING_DATA.filter((e) => FEATURED_COUNTRIES.includes(e.country));
 
@@ -136,7 +288,7 @@ export default function TippingGuideScreen() {
                 onPress={() => selectEntry(entry)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.dropdownFlag}>{entry.flag}</Text>
+                <FlagImage country={entry.country} size={22} />
                 <View style={styles.dropdownInfo}>
                   <Text style={styles.dropdownCountry}>{entry.country}</Text>
                   <Text style={styles.dropdownRegion}>{entry.region}</Text>
@@ -164,7 +316,7 @@ export default function TippingGuideScreen() {
           {/* Country header */}
           <View style={styles.countryCard}>
             <View style={styles.countryRow}>
-              <Text style={styles.countryFlag}>{selected.flag}</Text>
+              <FlagImage country={selected.country} size={44} />
               <View style={styles.countryInfo}>
                 <Text style={styles.countryName}>{selected.country}</Text>
                 <Text style={styles.countryMeta}>{selected.region} · Currency: {selected.currency}</Text>
@@ -203,7 +355,7 @@ export default function TippingGuideScreen() {
                   onPress={() => selectEntry(entry)}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.featuredFlag}>{entry.flag}</Text>
+                  <FlagImage country={entry.country} size={36} />
                   <Text style={styles.featuredCountry} numberOfLines={1}>{entry.country}</Text>
                   <View style={[styles.badgeSmall, { backgroundColor: cfg.bg, marginTop: scaleSpacing(4) }]}>
                     <Text style={[styles.badgeTextSmall, { color: cfg.color }]}>{cfg.label}</Text>
@@ -278,7 +430,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border, padding: scaleSpacing(SPACING.md),
   },
   countryRow:     { flexDirection: "row", alignItems: "flex-start", gap: scaleSpacing(SPACING.sm), marginBottom: scaleSpacing(SPACING.sm) },
-  countryFlag:    { fontSize: scaleFontSize(36) },
+  countryFlag:    { width: scaleFontSize(56), height: scaleFontSize(40), borderRadius: 4 },
   countryInfo:    { flex: 1 },
   countryName:    { fontSize: scaleFontSize(22), fontWeight: "700", color: COLORS.foreground },
   countryMeta:    { fontSize: scaleFontSize(12), color: COLORS.muted, marginTop: scaleSpacing(2) },
@@ -302,7 +454,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.border, padding: scaleSpacing(SPACING.md),
     alignItems: "flex-start",
   },
-  featuredFlag:    { fontSize: scaleFontSize(28), marginBottom: scaleSpacing(SPACING.xs) },
+  featuredFlag:    { marginBottom: scaleSpacing(SPACING.xs) },
   featuredCountry: { fontSize: scaleFontSize(13), fontWeight: "600", color: COLORS.foreground },
   coverageNote:    { fontSize: scaleFontSize(11), color: COLORS.muted, textAlign: "center", marginTop: scaleSpacing(SPACING.sm) },
 });

@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { COLORS, SPACING } from "../lib/constants";
+import { getCoordinates } from "../lib/geocoding";
 
 // Color coding for different types (matching web version)
 const PIN_COLORS = {
@@ -30,144 +31,6 @@ const TRANSPORT_ICONS = {
   Other: `<circle cx="12" cy="12" r="8"/>`,
 };
 
-// Geocoding cache to avoid repeated API calls
-const geocodeCache = new Map();
-let lastRequestTime = 0;
-
-// Rate limiter: ensure at least 1.1 seconds between requests (Nominatim requires 1 req/sec)
-async function waitForRateLimit() {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastRequestTime;
-  if (timeSinceLastRequest < 1100) {
-    await new Promise(resolve => setTimeout(resolve, 1100 - timeSinceLastRequest));
-  }
-  lastRequestTime = Date.now();
-}
-
-// Real geocoding using OpenStreetMap Nominatim API (same as web app)
-async function geocodeLocation(address, city, state, country) {
-  // Build cache key
-  const parts = [address, city, state, country].filter(Boolean).map(s => s.toLowerCase());
-  const cacheKey = parts.join(',');
-
-  if (geocodeCache.has(cacheKey)) {
-    return geocodeCache.get(cacheKey);
-  }
-
-  try {
-    // Build query string
-    const queryParts = [];
-    if (address) queryParts.push(address);
-    if (city && (!country || city.toLowerCase() !== country.toLowerCase())) queryParts.push(city);
-    if (state) queryParts.push(state);
-    if (country) queryParts.push(country);
-
-    const query = encodeURIComponent(queryParts.join(', '));
-
-    await waitForRateLimit();
-
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`,
-      {
-        headers: {
-          'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      geocodeCache.set(cacheKey, null);
-      return null;
-    }
-
-    const data = await response.json();
-
-    if (data && data.length > 0) {
-      const coords = {
-        latitude: parseFloat(data[0].lat),
-        longitude: parseFloat(data[0].lon),
-      };
-      geocodeCache.set(cacheKey, coords);
-      return coords;
-    }
-
-    // Fallback 1: Try without address (city + state + country)
-    if (address && city) {
-      const fallbackParts = [city, state, country].filter(Boolean);
-      const fallbackQuery = encodeURIComponent(fallbackParts.join(', '));
-      const fallbackCacheKey = fallbackParts.join(',').toLowerCase();
-
-      if (geocodeCache.has(fallbackCacheKey)) {
-        const cached = geocodeCache.get(fallbackCacheKey);
-        geocodeCache.set(cacheKey, cached);
-        return cached;
-      }
-
-      await waitForRateLimit();
-      const fallbackResponse = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${fallbackQuery}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
-          },
-        }
-      );
-
-      if (fallbackResponse.ok) {
-        const fallbackData = await fallbackResponse.json();
-        if (fallbackData && fallbackData.length > 0) {
-          const coords = {
-            latitude: parseFloat(fallbackData[0].lat),
-            longitude: parseFloat(fallbackData[0].lon),
-          };
-          geocodeCache.set(fallbackCacheKey, coords);
-          geocodeCache.set(cacheKey, coords);
-          return coords;
-        }
-      }
-    }
-
-    // Fallback 2: Try just country
-    if (country) {
-      const countryCacheKey = country.toLowerCase();
-
-      if (geocodeCache.has(countryCacheKey)) {
-        const cached = geocodeCache.get(countryCacheKey);
-        geocodeCache.set(cacheKey, cached);
-        return cached;
-      }
-
-      await waitForRateLimit();
-      const countryResponse = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(country)}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'TenMilesAhead-TravelApp-Mobile/1.0',
-          },
-        }
-      );
-
-      if (countryResponse.ok) {
-        const countryData = await countryResponse.json();
-        if (countryData && countryData.length > 0) {
-          const coords = {
-            latitude: parseFloat(countryData[0].lat),
-            longitude: parseFloat(countryData[0].lon),
-          };
-          geocodeCache.set(countryCacheKey, coords);
-          geocodeCache.set(cacheKey, coords);
-          return coords;
-        }
-      }
-    }
-
-    geocodeCache.set(cacheKey, null);
-    return null;
-  } catch (error) {
-    geocodeCache.set(cacheKey, null);
-    return null;
-  }
-}
 
 export default function TripDetailMap({
   trip,
@@ -183,128 +46,117 @@ export default function TripDetailMap({
     generateMapHTMLAsync();
   }, [trip, destinations, activities, restaurants]);
 
+  const createIconSVG = (type, transportMode) => {
+    const colors = PIN_COLORS[type];
+    const transportIcon = transportMode && TRANSPORT_ICONS[transportMode]
+      ? TRANSPORT_ICONS[transportMode]
+      : "";
+    return `data:image/svg+xml;base64,${btoa(`
+      <svg width="32" height="42" viewBox="0 0 32 42" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 0C7.163 0 0 7.163 0 16c0 13 16 26 16 26s16-13 16-26C32 7.163 24.837 0 16 0z"
+          fill="${colors.fill}"
+          stroke="${colors.stroke}"
+          stroke-width="2"/>
+        <circle cx="16" cy="16" r="7" fill="white"/>
+        ${transportIcon ? `<g transform="translate(9, 9) scale(0.58)" fill="${colors.fill}">${transportIcon}</g>` : ""}
+      </svg>
+    `)}`;
+  };
+
   async function generateMapHTMLAsync() {
     setLoading(true);
-    // Prepare markers data
-    const markers = [];
 
-    // Helper function to create icon SVG
-    const createIconSVG = (type, transportMode) => {
-      const colors = PIN_COLORS[type];
-      const transportIcon = transportMode && TRANSPORT_ICONS[transportMode]
-        ? TRANSPORT_ICONS[transportMode]
-        : "";
+    // Collect all items to geocode
+    const items = [];
 
-      return `data:image/svg+xml;base64,${btoa(`
-        <svg width="32" height="42" viewBox="0 0 32 42" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16 0C7.163 0 0 7.163 0 16c0 13 16 26 16 26s16-13 16-26C32 7.163 24.837 0 16 0z"
-            fill="${colors.fill}"
-            stroke="${colors.stroke}"
-            stroke-width="2"/>
-          <circle cx="16" cy="16" r="7" fill="white"/>
-          ${transportIcon ? `<g transform="translate(9, 9) scale(0.58)" fill="${colors.fill}">${transportIcon}</g>` : ""}
-        </svg>
-      `)}`;
-    };
-
-    // Add origin marker if available
     if (trip.originCity && trip.originCountry) {
-      const coords = await geocodeLocation(
-        trip.originAddress,
-        trip.originCity,
-        trip.originState,
-        trip.originCountry
-      );
-      if (coords) {
-        markers.push({
-          lat: coords.latitude,
-          lng: coords.longitude,
-          type: "origin",
-          name: "Starting Point",
-          location: [trip.originCity, trip.originState, trip.originCountry]
-            .filter(Boolean)
-            .join(", "),
-          transportMode: trip.originTransportationType,
-          iconUrl: createIconSVG("origin", trip.originTransportationType),
-          startDate: trip.startDate,
-        });
-      }
+      items.push({
+        type: "origin",
+        address: trip.originAddress,
+        city: trip.originCity,
+        state: trip.originState,
+        country: trip.originCountry,
+        name: "Starting Point",
+        transportMode: trip.originTransportationType,
+        startDate: trip.startDate,
+      });
     }
 
-    // Add destination markers
     for (const dest of destinations) {
       if (dest.onShip) continue;
       const city = dest.city || trip.city;
       const country = dest.country || trip.country;
       if (!city || !country) continue;
-
-      const coords = await geocodeLocation(dest.address, city, dest.state, country);
-      if (coords) {
-        markers.push({
-          lat: coords.latitude,
-          lng: coords.longitude,
-          type: "destination",
-          name: dest.name,
-          location: [city, dest.state, country].filter(Boolean).join(", "),
-          transportMode: dest.transportationMode || dest.transportationType,
-          iconUrl: createIconSVG(
-            "destination",
-            dest.transportationMode || dest.transportationType
-          ),
-          startDate: dest.startDate,
-        });
-      }
+      items.push({
+        type: "destination",
+        address: dest.address,
+        city,
+        state: dest.state,
+        country,
+        name: dest.name,
+        transportMode: dest.transportationMode || dest.transportationType,
+        startDate: dest.startDate,
+      });
     }
 
-    // Add activity markers
     for (const act of activities) {
       if (act.onShip) continue;
       const city = act.city || trip.city;
       const country = act.country || trip.country;
       if (!city || !country) continue;
-
-      const coords = await geocodeLocation(act.address, city, act.state, country);
-      if (coords) {
-        markers.push({
-          lat: coords.latitude,
-          lng: coords.longitude,
-          type: "activity",
-          name: act.name,
-          location: [city, act.state, country].filter(Boolean).join(", "),
-          transportMode: act.transportationMode || act.transportationType,
-          iconUrl: createIconSVG(
-            "activity",
-            act.transportationMode || act.transportationType
-          ),
-          startDate: act.startDate,
-        });
-      }
+      items.push({
+        type: "activity",
+        address: act.address,
+        city,
+        state: act.state,
+        country,
+        name: act.name,
+        transportMode: act.transportationMode || act.transportationType,
+        startDate: act.startDate,
+      });
     }
 
-    // Add restaurant markers
     for (const rest of restaurants) {
       if (rest.onShip) continue;
       const city = rest.city || trip.city;
       const country = rest.country || trip.country;
       if (!city || !country) continue;
-
-      const coords = await geocodeLocation(rest.address, city, rest.state, country);
-      if (coords) {
-        markers.push({
-          lat: coords.latitude,
-          lng: coords.longitude,
-          type: "restaurant",
-          name: rest.name,
-          location: [city, rest.state, country].filter(Boolean).join(", "),
-          transportMode: rest.transportationMode || rest.transportationType,
-          iconUrl: createIconSVG(
-            "restaurant",
-            rest.transportationMode || rest.transportationType
-          ),
-          startDate: rest.startDate,
-        });
-      }
+      items.push({
+        type: "restaurant",
+        address: rest.address,
+        city,
+        state: rest.state,
+        country,
+        name: rest.name,
+        transportMode: rest.transportationMode || rest.transportationType,
+        startDate: rest.startDate,
+      });
     }
+
+    // Geocode all locations in parallel — shared server cache makes this fast
+    const results = await Promise.allSettled(
+      items.map(async (item) => {
+        const coords = await getCoordinates(item.address, item.city, item.state, item.country);
+        return coords ? { ...item, coords } : null;
+      })
+    );
+
+    const markers = results
+      .filter((r) => r.status === "fulfilled" && r.value !== null)
+      .map((r) => {
+        const { coords, type, name, city, state, country, transportMode, startDate } = r.value;
+        const [lng, lat] = coords; // getCoordinates returns [longitude, latitude]
+        return {
+          lat,
+          lng,
+          type,
+          name,
+          location: [city, state, country].filter(Boolean).join(", "),
+          transportMode,
+          iconUrl: createIconSVG(type, transportMode),
+          startDate,
+        };
+      });
 
     const markersJSON = JSON.stringify(markers);
 

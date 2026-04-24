@@ -239,30 +239,32 @@ export const LARGE_CITIES_5M = new Set([
   'sydney','melbourne','singapore',
 ]);
 
-// UNESCO World Heritage site cities / place names
-export const UNESCO_PLACES = new Set([
-  // by city name
-  'agra','rome','athens','giza','luxor','abu simbel','florence',
-  'venice','dubrovnik','edinburgh','krakow','prague','salzburg',
-  'versailles','granada','barcelona','bruges','ghent','siem reap',
-  'cusco','aguas calientes','valladolid','oaxaca','guanajuato',
-  'cartagena','sucre','potosi','montevideo','quito','havana',
-  'bagan','luang prabang','hoi an','hue','kyoto','nara','nikko',
-  'hiroshima','beijing','lijiang','pingyao','zhangjiajie','guilin',
-  'angkor','jerash','wadi rum','petra','jerusalem','cairo','luxor',
-  'marrakech','fes','fez','meknes','lamu','zanzibar','goree',
-  'carthage','tunis','timbuktu','stonehenge','bath','edinburgh',
-  'pompeii','assisi','siena','cinque terre','matera','alberobello',
-  'valletta','mdina','piraeus','delphi','olympia','meteora',
-  // by place name keywords
-  'machu picchu','angkor wat','chichen itza','colosseum','taj mahal',
-  'great wall','petra','stonehenge','alhambra','sagrada familia',
-  'pyramid','pyramids','parthenon','acropolis','pompeii','tikal',
-  'teotihuacan','palenque','copan','sigiriya','borobudur','prambanan',
-  'komodo','galapagos','serengeti','kilimanjaro','okavango',
-  'yellowstone','grand canyon','yosemite','everglades',
-  'banff','jasper','old city','historic centre','historic center',
-]);
+// UNESCO World Heritage keywords — mirrors web's UNESCO_KEYWORDS array exactly.
+// Uses multi-word / specific phrases to avoid false positives from short city names.
+export const UNESCO_KEYWORDS = [
+  'angkor','petra','machu picchu','great barrier reef','yellowstone',
+  'grand canyon','yosemite','galapagos','serengeti','taj mahal',
+  'great wall','forbidden city','lhasa','potala palace','venice',
+  'florence','pompeii','athens','acropolis','dubrovnik','split',
+  'kotor','mostar','prague','krakow','cracow','auschwitz','versailles',
+  'mont saint-michel','chartres','avignon','bagan','borobudur',
+  'prambanan','luang prabang','hoi an','hue','halong bay','ayutthaya',
+  'sukhothai','kandy','sigiriya','ephesus','cappadocia','goreme',
+  'alhambra','granada','cordoba','stonehenge','bath','colosseum',
+  'sistine chapel','vatican','amalfi','cinque terre','tikal',
+  'chichen itza','palenque','uxmal','teotihuacan','copan','tulum',
+  'great zimbabwe','victoria falls','kilimanjaro','ngorongoro',
+  'robben island','luxor','karnak','abu simbel','pyramids','giza',
+  'jerash','wadi rum','palmyra','timbuktu','lalibela','aksum',
+  'marrakech','fez','fes','meknes','carthage',
+  'iguazu','iguassu','cartagena','nazca','ouro preto',
+  'hiroshima','nara','kyoto','nikko','himeji',
+  'hallstatt','dolomites','plitvice','krka',
+  'uluru','kakadu','sundarbans','sagarmatha','royal chitwan',
+];
+
+// Keep UNESCO_PLACES as alias for backward compat (not used for Cultural Explorer anymore)
+export const UNESCO_PLACES = new Set(UNESCO_KEYWORDS);
 
 // National park / protected area keywords (checked in city/name/destination name)
 export const NATIONAL_PARK_KEYWORDS = [
@@ -350,13 +352,10 @@ function isLargeCity(city) {
 }
 
 function isUNESCOPlace(city, name) {
-  const c = norm(city);
-  const n = norm(name);
-  if (UNESCO_PLACES.has(c)) return true;
-  for (const place of UNESCO_PLACES) {
-    if (n.includes(place) || c.includes(place)) return true;
-  }
-  return false;
+  // Mirrors web's tripTextMatch(t, UNESCO_KEYWORDS): simple substring check
+  // against specific multi-word phrases — avoids false positives from short city names.
+  const text = norm(`${city} ${name || ''}`);
+  return UNESCO_KEYWORDS.some((kw) => text.includes(kw));
 }
 
 function isIsland(city, country) {
@@ -474,9 +473,9 @@ export function evaluateBadges(data) {
   if (trips.length > 0) earned.add('first_logged_trip');
 
   // ── First Flight ──────────────────────────────────────────────────────────
-  const hasAnyFlight = trips.some(
-    (t) => t.originTransportationType === 'Airplane'
-  );
+  // Use flightsByMonth (built with fuzzy matching in BadgesScreen) so any
+  // flight transport variant ("Airplane", "Flight", etc.) is captured.
+  const hasAnyFlight = Object.values(flightsByMonth).some((c) => c > 0);
   if (hasAnyFlight) earned.add('first_flight');
 
   // ── First Accommodation Stay ──────────────────────────────────────────────
@@ -665,21 +664,27 @@ export function evaluateBadges(data) {
   }
 
   // ── Modern 7 Wonders ─────────────────────────────────────────────────────
-  // Matches web: keyword-only matching across city, name, country fields
+  // Uses word-boundary matching to prevent false positives like
+  // 'agra' matching 'niagara', or 'piste' matching ski slope names.
   const WONDER_KEYWORDS_MAP = {
     great_wall_wanderer:     ['great wall', 'badaling', 'mutianyu', 'jinshanling', 'simatai'],
     petra_pathfinder:        ['petra', 'wadi musa', 'wadi mousa'],
     redeemer_ridge_visitor:  ['christ the redeemer', 'corcovado', 'rio de janeiro'],
     machu_picchu_explorer:   ['machu picchu', 'aguas calientes'],
-    chichen_itza_adventurer: ['chichen itza', 'chich\u00e9n itz\u00e1', 'piste'],
-    colosseum_challenger:    ['colosseum', 'colosseo', 'rome', 'roma'],
+    chichen_itza_adventurer: ['chichen itza', 'chich\u00e9n itz\u00e1'],
+    colosseum_challenger:    ['colosseum', 'colosseo'],
     taj_mahal_traveler:      ['taj mahal', 'agra'],
   };
 
+  function wonderMatch(text, keyword) {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, 'i').test(text);
+  }
+
   for (const loc of allLocations) {
-    const locText = `${loc.city || ''} ${loc.name || ''} ${loc.country || ''}`.toLowerCase();
+    const locText = `${loc.city || ''} ${loc.name || ''} ${loc.country || ''}`;
     for (const [badgeId, keywords] of Object.entries(WONDER_KEYWORDS_MAP)) {
-      if (keywords.some((kw) => locText.includes(kw))) {
+      if (keywords.some((kw) => wonderMatch(locText, kw))) {
         earned.add(badgeId);
       }
     }
@@ -690,9 +695,9 @@ export function evaluateBadges(data) {
     const tripText = [
       trip.city, trip.name, trip.country,
       trip.state, trip.specificAddress, trip.originCity,
-    ].filter(Boolean).join(' ').toLowerCase();
+    ].filter(Boolean).join(' ');
     for (const [badgeId, keywords] of Object.entries(WONDER_KEYWORDS_MAP)) {
-      if (keywords.some((kw) => tripText.includes(kw))) {
+      if (keywords.some((kw) => wonderMatch(tripText, kw))) {
         earned.add(badgeId);
       }
     }

@@ -509,6 +509,30 @@ export default function PackingListScreen() {
     setView("packing");
   }
 
+  // ── Reset progress ─────────────────────────────────────────────────────────
+  function confirmResetProgress() {
+    Alert.alert(
+      "Reset Progress?",
+      "This will uncheck all packed items so you can reuse this list for a new trip. Your list and items will not be deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => {
+            setPackedItems({});
+            if (currentSavedId && user) {
+              updateDoc(doc(db, "users", user.uid, "packingLists", currentSavedId), {
+                packedItems: {},
+                updatedAt: Date.now(),
+              }).catch(console.error);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   // ── Packing helpers ────────────────────────────────────────────────────────
   function togglePacked(itemId, trav) {
     setPackedItems((prev) => {
@@ -862,9 +886,11 @@ export default function PackingListScreen() {
           <View>
             <View style={styles.packingHeader}>
               <Text style={styles.packingTitle} numberOfLines={1}>{listName || "Packing List"}</Text>
-              <TouchableOpacity onPress={resetToLanding} activeOpacity={0.7}>
-                <Text style={styles.packingBackText}>← Back</Text>
-              </TouchableOpacity>
+              <View style={styles.packingHeaderActions}>
+                <TouchableOpacity onPress={confirmResetProgress} activeOpacity={0.7}>
+                  <Text style={styles.packingResetText}>Reset Progress</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.progressCard}>
@@ -1084,6 +1110,8 @@ const styles = StyleSheet.create({
   // Packing view
   packingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: scaleSpacing(SPACING.md), gap: scaleSpacing(SPACING.sm) },
   packingTitle: { flex: 1, fontSize: scaleFontSize(22), fontWeight: "700", color: COLORS.foreground },
+  packingHeaderActions: { flexDirection: "row", alignItems: "center", gap: scaleSpacing(SPACING.md), flexShrink: 0 },
+  packingResetText: { fontSize: scaleFontSize(13), color: "#ef4444" },
   packingBackText: { fontSize: scaleFontSize(13), color: COLORS.muted },
   progressCard: { backgroundColor: COLORS.surface, borderRadius: scaleFontSize(14), borderWidth: 1, borderColor: COLORS.border, padding: scaleSpacing(SPACING.md), marginBottom: scaleSpacing(SPACING.md) },
   progressCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: scaleSpacing(SPACING.xs) },

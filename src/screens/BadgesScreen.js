@@ -12,6 +12,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   query,
   where,
 } from "firebase/firestore";
@@ -224,11 +225,16 @@ export default function BadgesScreen({ route }) {
   async function fetchAndEvaluate() {
     setLoading(true);
     try {
-      // ── 1. Fetch all trips ─────────────────────────────────────────────
-      const tripsSnap = await getDocs(
+      // ── 1. Fetch all trips from server (bypass cache so totalMiles is fresh)
+      const tripsSnap = await getDocsFromServer(
         query(collection(db, "trips"), where("ownerId", "==", user.uid))
       );
       const allTrips = tripsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // Only evaluate past trips — mirrors web's behavior (badges/page.tsx line 284)
+      // Future trips (e.g. "Europe 2027") must not award badges prematurely
+      const today = new Date().toISOString().slice(0, 10);
+      const pastTrips = allTrips.filter((t) => !t.startDate || t.startDate <= today);
 
       // ── 2. Fetch destinations + accommodations for each trip ───────────
       const allLocations = [];
@@ -241,7 +247,24 @@ export default function BadgesScreen({ route }) {
       const USA_NORMS = ["united states","usa","us","united states of america"];
       const isUSA = (c) => USA_NORMS.includes((c || "").toLowerCase().trim());
 
-      for (const trip of allTrips) {
+      // Fuzzy transport type helpers — mirrors web's isCarOrRV() / isFlight()
+      const isCarOrRV = (type) => {
+        const t = (type || "").toLowerCase();
+        return (
+          t.includes("car") || t.includes("rv") || t.includes("driv") ||
+          t.includes("road") || t.includes("auto") || t.includes("truck") ||
+          t.includes("van") || t.includes("motorhome") || t.includes("motor home")
+        );
+      };
+      const isFlight = (type) => {
+        const t = (type || "").toLowerCase();
+        return (
+          t.includes("flight") || t.includes("plane") || t.includes("air") ||
+          t.includes("fly") || t === "airplane"
+        );
+      };
+
+      for (const trip of pastTrips) {
         // Main trip location
         if (trip.city && trip.country) {
           allLocations.push({
@@ -254,19 +277,16 @@ export default function BadgesScreen({ route }) {
         if (trip.country) countriesSet.add((trip.country).toLowerCase().trim());
         if (trip.state && isUSA(trip.country)) statesSet.add(trip.state.trim());
 
-        // Flights by month
-        if (trip.originTransportationType === "Airplane" && trip.startDate) {
+        // Flights by month — check both transport fields (matches web)
+        const tripTransport = trip.originTransportationType || trip.transportationType;
+        if (isFlight(tripTransport) && trip.startDate) {
           const key = trip.startDate.substring(0, 7);
           flightsByMonth[key] = (flightsByMonth[key] || 0) + 1;
         }
 
-        // Car / RV per-trip miles
-        if (
-          (trip.originTransportationType === "Car" ||
-            trip.originTransportationType === "RV") &&
-          trip.totalMiles > 0
-        ) {
-          carRvTrips.push({ miles: trip.totalMiles, transport: trip.originTransportationType });
+        // Car / RV per-trip miles — no totalMiles > 0 gate so road_trip_rookie earns
+        if (isCarOrRV(trip.originTransportationType) || isCarOrRV(trip.transportationType)) {
+          carRvTrips.push({ miles: trip.totalMiles ?? 0, transport: tripTransport });
         }
 
         // Destinations subcollection
@@ -287,16 +307,12 @@ export default function BadgesScreen({ route }) {
           if (dest.state && isUSA(dest.country)) statesSet.add(dest.state.trim());
 
           // Destinations used for driving distance (Car/RV)
-          if (
-            (dest.transportationType === "Car" ||
-              dest.transportationType === "RV") &&
-            dest.totalMiles > 0
-          ) {
-            carRvTrips.push({ miles: dest.totalMiles, transport: dest.transportationType });
+          if (isCarOrRV(dest.transportationType)) {
+            carRvTrips.push({ miles: dest.totalMiles ?? 0, transport: dest.transportationType });
           }
 
           // Flights from within trip
-          if (dest.transportationType === "Airplane" && dest.startDate) {
+          if (isFlight(dest.transportationType) && dest.startDate) {
             const key = dest.startDate.substring(0, 7);
             flightsByMonth[key] = (flightsByMonth[key] || 0) + 1;
           }
@@ -360,7 +376,7 @@ export default function BadgesScreen({ route }) {
 
       // ── 4. Evaluate ───────────────────────────────────────────────────
       const earned = evaluateBadges({
-        trips: allTrips,
+        trips: pastTrips,
         allLocations,
         totalMiles,
         statesCount,

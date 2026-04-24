@@ -82,6 +82,7 @@ export default function PlaceModal({
     valueRating: 0,
     serviceRating: 0,
     locationRating: 0,
+    price: "",
   });
 
   // Additional fields
@@ -233,6 +234,7 @@ export default function PlaceModal({
       valueRating: 0,
       serviceRating: 0,
       locationRating: 0,
+      price: "",
     });
     setExtraFields({});
     setPendingDocuments([]);
@@ -256,6 +258,7 @@ export default function PlaceModal({
       valueRating: item.valueRating || 0,
       serviceRating: item.serviceRating || 0,
       locationRating: item.locationRating || 0,
+      price: item.price != null ? String(item.price) : "",
     });
     setExtraFields({
       transportationType: item.transportationType || "",
@@ -270,10 +273,12 @@ export default function PlaceModal({
 
     try {
       setUploading(true);
+      const { price: priceStr, ...restForm } = form;
       const data = {
-        ...form,
+        ...restForm,
         ...extraFields,
         ownerId: user.uid,
+        price: priceStr !== "" && !isNaN(Number(priceStr)) ? Number(priceStr) : null,
       };
 
       let placeId;
@@ -692,6 +697,9 @@ export default function PlaceModal({
             <Text style={styles.itemWebsite}>{item.websiteUrl}</Text>
           </TouchableOpacity>
         )}
+        {item.price != null && (
+          <Text style={styles.itemPrice}>💰 ${Number(item.price).toLocaleString("en-US", { maximumFractionDigits: 2 })}</Text>
+        )}
         {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
         {item.review && <Text style={styles.itemReview}>"{item.review}"</Text>}
 
@@ -920,6 +928,16 @@ export default function PlaceModal({
                   />
                 </View>
               </View>
+
+              <Text style={styles.label}>Price ($)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 150"
+                placeholderTextColor={COLORS.muted}
+                value={form.price}
+                onChangeText={(text) => setForm({ ...form, price: text })}
+                keyboardType="decimal-pad"
+              />
 
               {/* Extra fields like transportation */}
               {extraLeft.map((field) => (
@@ -1284,6 +1302,12 @@ const styles = StyleSheet.create({
     color: COLORS.foreground,
     marginTop: SPACING.sm,
     fontStyle: "italic",
+  },
+  itemPrice: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "600",
+    marginTop: SPACING.xs,
   },
   itemNotes: {
     fontSize: 14,
