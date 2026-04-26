@@ -106,6 +106,7 @@ function GlobalReviewsInner({ navigation }) {
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
   const [selectedReview, setSelectedReview] = useState(null);
   const [editingReview, setEditingReview] = useState(null);
   const [addingReviewForPlace, setAddingReviewForPlace] = useState(null);
@@ -599,8 +600,10 @@ function GlobalReviewsInner({ navigation }) {
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => {
-              setShowLocationDropdown(!showLocationDropdown);
+              const next = !showLocationDropdown;
+              setShowLocationDropdown(next);
               setShowTypeDropdown(false);
+              if (next) setLocationSearch("");
             }}
           >
             <Text style={styles.filterButtonText}>{selectedLocation}</Text>
@@ -629,20 +632,37 @@ function GlobalReviewsInner({ navigation }) {
       {/* Filter Dropdowns */}
       {showLocationDropdown && (
         <View style={styles.dropdown}>
-          <ScrollView style={styles.dropdownScroll}>
-            {uniqueLocations.map((location) => (
-              <TouchableOpacity
-                key={location}
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setSelectedLocation(location);
-                  setShowLocationDropdown(false);
-                  loadReviewsByLocation(location);
-                }}
-              >
-                <Text style={styles.dropdownItemText}>{location}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.locationSearchContainer}>
+            <TextInput
+              style={styles.locationSearchInput}
+              placeholder="Search locations..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={locationSearch}
+              onChangeText={setLocationSearch}
+              autoFocus
+              clearButtonMode="while-editing"
+            />
+          </View>
+          <ScrollView style={styles.dropdownScroll} keyboardShouldPersistTaps="handled">
+            {uniqueLocations
+              .filter((loc) =>
+                locationSearch.trim() === "" ||
+                loc.toLowerCase().includes(locationSearch.toLowerCase())
+              )
+              .map((location) => (
+                <TouchableOpacity
+                  key={location}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setSelectedLocation(location);
+                    setShowLocationDropdown(false);
+                    setLocationSearch("");
+                    loadReviewsByLocation(location);
+                  }}
+                >
+                  <Text style={styles.dropdownItemText}>{location}</Text>
+                </TouchableOpacity>
+              ))}
           </ScrollView>
         </View>
       )}
@@ -1817,15 +1837,29 @@ const styles = StyleSheet.create({
     backgroundColor: "#2c3e50",
     borderRadius: isTablet ? 12 : 8,
     zIndex: 100,
-    maxHeight: isTablet ? 300 : 200,
+    maxHeight: isTablet ? 340 : 260,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
   dropdownRight: {
     left: "50%",
   },
+  locationSearchContainer: {
+    paddingHorizontal: scaleSpacing(SPACING.sm),
+    paddingVertical: scaleSpacing(SPACING.xs),
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  locationSearchInput: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 6,
+    paddingHorizontal: scaleSpacing(SPACING.sm),
+    paddingVertical: scaleSpacing(SPACING.xs),
+    color: COLORS.white,
+    fontSize: scaleFontSize(13),
+  },
   dropdownScroll: {
-    maxHeight: isTablet ? 300 : 200,
+    maxHeight: isTablet ? 280 : 200,
   },
   dropdownItem: {
     paddingVertical: scaleSpacing(SPACING.sm),

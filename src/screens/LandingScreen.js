@@ -320,9 +320,6 @@ export default function LandingScreen() {
             onPress={handleSubscribe}
           />
         </View>
-        <Text style={styles.pricingNote}>
-          Launch pricing — secure your rate.
-        </Text>
       </View>
 
       {/* FAQ Section */}

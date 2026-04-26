@@ -38,13 +38,24 @@ import PlaceModal from "../components/modals/PlaceModal";
 import ConfirmModal from "../components/modals/ConfirmModal";
 import AddTripModal from "../components/modals/AddTripModal";
 import FeedbackModal from "../components/modals/FeedbackModal";
-import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
+import {
+  COLORS,
+  SPACING,
+  SCREENS,
+  scaleFontSize,
+  scaleSpacing,
+} from "../lib/constants";
 import { dateRangeOf, formatDateMMDDYYYY } from "../lib/utils";
 import { calculateDistance } from "../lib/geocoding";
 
 // Countdown Timer Component
 function CountdownTimer({ targetDate }) {
-  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
+  const [timeLeft, setTimeLeft] = useState({
+    days: 0,
+    hours: 0,
+    mins: 0,
+    secs: 0,
+  });
 
   useEffect(() => {
     const calculateTimeLeft = () => {
@@ -58,7 +69,9 @@ function CountdownTimer({ targetDate }) {
 
       return {
         days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        hours: Math.floor(
+          (difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+        ),
         mins: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
         secs: Math.floor((difference % (1000 * 60)) / 1000),
       };
@@ -207,8 +220,7 @@ export default function HomeScreen() {
     try {
       await deleteDoc(doc(db, "trips", deleteTrip.id));
       setDeleteTrip(null);
-    } catch (error) {
-    }
+    } catch (error) {}
   }
 
   // Fetch recent trips for display
@@ -218,7 +230,7 @@ export default function HomeScreen() {
     const q = query(
       collection(db, "trips"),
       where("ownerId", "==", user.uid),
-      orderBy("startDate", "desc")
+      orderBy("startDate", "desc"),
     );
 
     const unsub = onSnapshot(
@@ -235,7 +247,7 @@ export default function HomeScreen() {
           .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
         setUpcomingTrips(upcoming);
       },
-      () => setTrips([])
+      () => setTrips([]),
     );
 
     return () => unsub();
@@ -246,11 +258,15 @@ export default function HomeScreen() {
     if (!user) return;
     const q = query(
       collection(db, "users", user.uid, "pendingBookings"),
-      where("status", "==", "pending")
+      where("status", "==", "pending"),
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setPendingBookingsCount(snap.size);
-    }, () => {});
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setPendingBookingsCount(snap.size);
+      },
+      () => {},
+    );
     return () => unsub();
   }, [user]);
 
@@ -279,31 +295,31 @@ export default function HomeScreen() {
       unsubscribers.push(
         onSnapshot(collection(db, "trips", trip.id, "destinations"), () => {
           setStatsVersion((v) => v + 1);
-        })
+        }),
       );
       // Activities
       unsubscribers.push(
         onSnapshot(collection(db, "trips", trip.id, "activities"), () => {
           setStatsVersion((v) => v + 1);
-        })
+        }),
       );
       // Accommodations
       unsubscribers.push(
         onSnapshot(collection(db, "trips", trip.id, "accommodations"), () => {
           setStatsVersion((v) => v + 1);
-        })
+        }),
       );
       // Restaurants
       unsubscribers.push(
         onSnapshot(collection(db, "trips", trip.id, "restaurants"), () => {
           setStatsVersion((v) => v + 1);
-        })
+        }),
       );
       // Media
       unsubscribers.push(
         onSnapshot(collection(db, "trips", trip.id, "media"), () => {
           setStatsVersion((v) => v + 1);
-        })
+        }),
       );
     }
 
@@ -330,7 +346,7 @@ export default function HomeScreen() {
         // Exclude future trips — matches web's `t.startDate <= todayStr` filter
         const todayStr = new Date().toISOString().split("T")[0];
         const pastTrips = filteredTrips.filter(
-          (t) => !t.startDate || t.startDate <= todayStr
+          (t) => !t.startDate || t.startDate <= todayStr,
         );
 
         // PHASE 1: Fetch all subcollections in parallel — also collect destinations
@@ -344,7 +360,7 @@ export default function HomeScreen() {
               const end = new Date(t.endDate);
               const days =
                 Math.ceil(
-                  (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                  (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
                 ) + 1;
               totalDays += days;
             }
@@ -355,9 +371,12 @@ export default function HomeScreen() {
             if (t.country) cSet.add(t.country);
             const isUSA =
               t.country &&
-              ["united states", "usa", "us", "united states of america"].includes(
-                t.country.toLowerCase().trim()
-              );
+              [
+                "united states",
+                "usa",
+                "us",
+                "united states of america",
+              ].includes(t.country.toLowerCase().trim());
             if (t.state && t.state.trim() && isUSA) sSet.add(t.state.trim());
             if (t.city) citySet.add(`${t.city}|${t.country || ""}`);
             if (t.originTransportationType) {
@@ -381,13 +400,19 @@ export default function HomeScreen() {
               if (dest.country) cSet.add(dest.country);
               const destIsUSA =
                 dest.country &&
-                ["united states", "usa", "us", "united states of america"].includes(
-                  dest.country.toLowerCase().trim()
-                );
+                [
+                  "united states",
+                  "usa",
+                  "us",
+                  "united states of america",
+                ].includes(dest.country.toLowerCase().trim());
               if (dest.state && dest.state.trim() && destIsUSA)
                 sSet.add(dest.state.trim());
               if (dest.city) citySet.add(`${dest.city}|${dest.country || ""}`);
-              if (dest.transportationType && dest.transportationType !== "Cruise") {
+              if (
+                dest.transportationType &&
+                dest.transportationType !== "Cruise"
+              ) {
                 transportCounts[dest.transportationType] =
                   (transportCounts[dest.transportationType] || 0) + 1;
               }
@@ -397,7 +422,10 @@ export default function HomeScreen() {
 
             actSnap.forEach((a) => {
               const act = a.data();
-              if (act.transportationType && act.transportationType !== "Cruise") {
+              if (
+                act.transportationType &&
+                act.transportationType !== "Cruise"
+              ) {
                 transportCounts[act.transportationType] =
                   (transportCounts[act.transportationType] || 0) + 1;
               }
@@ -412,7 +440,10 @@ export default function HomeScreen() {
                 accommodationCounts[acc.accommodationType] =
                   (accommodationCounts[acc.accommodationType] || 0) + 1;
               }
-              if (acc.transportationType && acc.transportationType !== "Cruise") {
+              if (
+                acc.transportationType &&
+                acc.transportationType !== "Cruise"
+              ) {
                 transportCounts[acc.transportationType] =
                   (transportCounts[acc.transportationType] || 0) + 1;
               }
@@ -420,7 +451,10 @@ export default function HomeScreen() {
 
             restaurantSnap.forEach((r) => {
               const rest = r.data();
-              if (rest.transportationType && rest.transportationType !== "Cruise") {
+              if (
+                rest.transportationType &&
+                rest.transportationType !== "Cruise"
+              ) {
                 transportCounts[rest.transportationType] =
                   (transportCounts[rest.transportationType] || 0) + 1;
               }
@@ -430,7 +464,7 @@ export default function HomeScreen() {
               const mm = m.data();
               if (mm.type === "image") imgTotal += 1;
             });
-          })
+          }),
         );
 
         // Show stats immediately — no geocoding needed yet
@@ -457,31 +491,61 @@ export default function HomeScreen() {
               const destinations = tripDestinationsMap.get(t.id) || [];
               destinations.sort((a, b) =>
                 a.startDate && b.startDate
-                  ? new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-                  : 0
+                  ? new Date(a.startDate).getTime() -
+                    new Date(b.startDate).getTime()
+                  : 0,
               );
               const allLocations = [];
               if (t.city && t.country)
-                allLocations.push({ city: t.city, state: t.state, country: t.country, date: t.startDate || "" });
+                allLocations.push({
+                  city: t.city,
+                  state: t.state,
+                  country: t.country,
+                  date: t.startDate || "",
+                });
               for (const dest of destinations) {
                 if (dest.city && dest.country && dest.startDate)
-                  allLocations.push({ city: dest.city, state: dest.state, country: dest.country, date: dest.startDate });
+                  allLocations.push({
+                    city: dest.city,
+                    state: dest.state,
+                    country: dest.country,
+                    date: dest.startDate,
+                  });
               }
               allLocations.sort((a, b) =>
-                !a.date || !b.date ? 0 : new Date(a.date).getTime() - new Date(b.date).getTime()
+                !a.date || !b.date
+                  ? 0
+                  : new Date(a.date).getTime() - new Date(b.date).getTime(),
               );
               let tripMiles = 0;
               if (allLocations.length > 0) {
                 const firstLoc = allLocations[0];
-                tripMiles += await calculateDistance(t.originCity, t.originState, t.originCountry, firstLoc.city, firstLoc.state, firstLoc.country);
+                tripMiles += await calculateDistance(
+                  t.originCity,
+                  t.originState,
+                  t.originCountry,
+                  firstLoc.city,
+                  firstLoc.state,
+                  firstLoc.country,
+                );
                 for (let i = 1; i < allLocations.length; i++) {
-                  const p = allLocations[i - 1], c = allLocations[i];
-                  tripMiles += await calculateDistance(p.city, p.state, p.country, c.city, c.state, c.country);
+                  const p = allLocations[i - 1],
+                    c = allLocations[i];
+                  tripMiles += await calculateDistance(
+                    p.city,
+                    p.state,
+                    p.country,
+                    c.city,
+                    c.state,
+                    c.country,
+                  );
                 }
               }
               additionalMiles += tripMiles;
               if (tripMiles > 0) {
-                updateDoc(doc(db, "trips", t.id), { totalMiles: Math.round(tripMiles) }).catch(() => {});
+                updateDoc(doc(db, "trips", t.id), {
+                  totalMiles: Math.round(tripMiles),
+                }).catch(() => {});
               }
             } catch {}
           }
@@ -492,8 +556,7 @@ export default function HomeScreen() {
             }));
           }
         }
-      } catch (error) {
-      }
+      } catch (error) {}
     };
 
     calculateStats();
@@ -579,7 +642,9 @@ export default function HomeScreen() {
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
         <Text style={styles.welcomeText}>Welcome,</Text>
-        <Text style={styles.welcomeName}>{profile?.username || "traveler"}!</Text>
+        <Text style={styles.welcomeName}>
+          {profile?.username || "traveler"}!
+        </Text>
       </View>
 
       {/* Pending Bookings Banner */}
@@ -597,7 +662,8 @@ export default function HomeScreen() {
                 {pendingBookingsCount === 1 ? "Booking" : "Bookings"}
               </Text>
               <Text style={styles.pendingBookingsSubtitle}>
-                Tap to assign {pendingBookingsCount === 1 ? "it" : "them"} to a trip
+                Tap to assign {pendingBookingsCount === 1 ? "it" : "them"} to a
+                trip
               </Text>
             </View>
           </View>
@@ -699,7 +765,9 @@ export default function HomeScreen() {
                 style={styles.addTripButton}
                 onPress={() => setShowAddTrip(true)}
               >
-                <Text style={styles.addTripButtonText}>Add Your First Trip</Text>
+                <Text style={styles.addTripButtonText}>
+                  Add Your First Trip
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -720,7 +788,9 @@ export default function HomeScreen() {
       </View>
 
       {/* World Map */}
-      {filteredTrips.length > 0 && <WorldMap trips={filteredTrips} user={user} />}
+      {filteredTrips.length > 0 && (
+        <WorldMap trips={filteredTrips} user={user} />
+      )}
 
       {/* Travel Overview Stats */}
       <TravelOverview stats={stats} />
@@ -767,17 +837,23 @@ export default function HomeScreen() {
             <TouchableOpacity onPress={() => navigation.navigate(SCREENS.FAQS)}>
               <Text style={styles.footerLink}>FAQs</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TUTORIALS)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.TUTORIALS)}
+            >
               <Text style={styles.footerLink}>Tutorials</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.SUBSCRIBE)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.SUBSCRIBE)}
+            >
               <Text style={styles.footerLink}>Subscribe</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Support</Text>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.HELP_SUPPORT)}
+            >
               <Text style={styles.footerLink}>Help & Support</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setFeedbackVisible(true)}>
@@ -787,10 +863,14 @@ export default function HomeScreen() {
 
           <View style={styles.footerCol}>
             <Text style={styles.footerSectionTitle}>Legal</Text>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.PRIVACY)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.PRIVACY)}
+            >
               <Text style={styles.footerLink}>Privacy Policy</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate(SCREENS.TERMS)}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate(SCREENS.TERMS)}
+            >
               <Text style={styles.footerLink}>Terms of Service</Text>
             </TouchableOpacity>
           </View>
@@ -1045,7 +1125,9 @@ export default function HomeScreen() {
 
       <CalendarPickerModal
         visible={showToPicker}
-        value={dateTo ? new Date(dateTo) : dateFrom ? new Date(dateFrom) : new Date()}
+        value={
+          dateTo ? new Date(dateTo) : dateFrom ? new Date(dateFrom) : new Date()
+        }
         title="Filter To Date"
         onSelect={(d) => setDateTo(d.toISOString().split("T")[0])}
         onClose={() => setShowToPicker(false)}

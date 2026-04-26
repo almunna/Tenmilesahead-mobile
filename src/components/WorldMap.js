@@ -136,8 +136,11 @@ export default function WorldMap({ trips, user }) {
       const seenLocations = new Set();
       const countries = new Set();
 
+      const todayStr = new Date().toISOString().split("T")[0];
+      const pastTrips = trips.filter((t) => !t.startDate || t.startDate <= todayStr);
+
       const tripResults = await Promise.all(
-        trips.map(async (trip) => {
+        pastTrips.map(async (trip) => {
           try {
             const destSnap = await getDocs(
               collection(db, "trips", trip.id, "destinations")
@@ -584,25 +587,34 @@ function generateMapHTML() {
         mapped.forEach(function(n) { countriesToShade[n.toLowerCase().trim()] = true; });
       });
 
-      fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson')
-        .then(function(r) { return r.json(); })
-        .then(function(geoJSON) {
-          var visitedFeatures = geoJSON.features.filter(function(feature) {
-            var props = feature.properties;
-            var name = (props.ADMIN || props.NAME || props.name || props.NAME_LONG || '').toLowerCase().trim();
-            if (name.includes('antarctica')) return !!countriesToShade['antarctica'];
-            if (countriesToShade[name]) return true;
-            for (var key in countryNameMap) {
-              if (countryNameMap[key].some(function(v) { return v.toLowerCase() === name; }) && countriesToShade[key]) return true;
-            }
-            return false;
-          });
-          if (window._shadingLayer) window._shadingLayer.remove();
-          window._shadingLayer = L.geoJSON({ type: 'FeatureCollection', features: visitedFeatures }, {
-            style: { fillColor: '#FFC0CB', fillOpacity: 0.4, color: '#FF69B4', weight: 1, opacity: 0.6 }
-          }).addTo(map);
-        })
-        .catch(function() {});
+      function applyShading(geoJSON) {
+        var visitedFeatures = geoJSON.features.filter(function(feature) {
+          var props = feature.properties;
+          var name = (props.ADMIN || props.NAME || props.name || props.NAME_LONG || '').toLowerCase().trim();
+          if (name.includes('antarctica')) return !!countriesToShade['antarctica'];
+          if (countriesToShade[name]) return true;
+          for (var key in countryNameMap) {
+            if (countryNameMap[key].some(function(v) { return v.toLowerCase() === name; }) && countriesToShade[key]) return true;
+          }
+          return false;
+        });
+        if (window._shadingLayer) window._shadingLayer.remove();
+        window._shadingLayer = L.geoJSON({ type: 'FeatureCollection', features: visitedFeatures }, {
+          style: { fillColor: '#FFC0CB', fillOpacity: 0.4, color: '#FF69B4', weight: 1, opacity: 0.6 }
+        }).addTo(map);
+      }
+
+      if (window._cachedGeoJSON) {
+        applyShading(window._cachedGeoJSON);
+      } else {
+        fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson')
+          .then(function(r) { return r.json(); })
+          .then(function(geoJSON) {
+            window._cachedGeoJSON = geoJSON;
+            applyShading(geoJSON);
+          })
+          .catch(function() {});
+      }
     };
 
     // Called from React Native when trips change — resets map state

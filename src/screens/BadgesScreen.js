@@ -264,6 +264,16 @@ export default function BadgesScreen({ route }) {
         );
       };
 
+      // Car/RV miles from ALL trips — matches web's computeEarnedBadges which receives
+      // the full trips list, so a future road trip with a saved totalMiles counts towards
+      // distance badges (cross_country_cruiser, etc.) just like on web.
+      for (const trip of allTrips) {
+        const transport = trip.originTransportationType || trip.transportationType;
+        if (isCarOrRV(trip.originTransportationType) || isCarOrRV(trip.transportationType)) {
+          carRvTrips.push({ miles: trip.totalMiles ?? 0, transport });
+        }
+      }
+
       for (const trip of pastTrips) {
         // Main trip location
         if (trip.city && trip.country) {
@@ -282,11 +292,6 @@ export default function BadgesScreen({ route }) {
         if (isFlight(tripTransport) && trip.startDate) {
           const key = trip.startDate.substring(0, 7);
           flightsByMonth[key] = (flightsByMonth[key] || 0) + 1;
-        }
-
-        // Car / RV per-trip miles — no totalMiles > 0 gate so road_trip_rookie earns
-        if (isCarOrRV(trip.originTransportationType) || isCarOrRV(trip.transportationType)) {
-          carRvTrips.push({ miles: trip.totalMiles ?? 0, transport: tripTransport });
         }
 
         // Destinations subcollection

@@ -55,8 +55,8 @@ const NAV_SECTIONS = [
 /* ── Mirrors web FOOTER_MENU (Book Your Trip bar) ── */
 const BOOK_ITEMS = [
   { label: "Cruises",      icon: "🚢", url: "https://www.cruisedirect.com/?utm_source=cj&utm_medium=affiliate&utm_content=101693012" },
-  { label: "Flights",      icon: "✈️", url: "https://tidd.ly/4uqgGmU" },
   { label: "eSIMs",        icon: "📱", url: null }, // opens EsimQuiz modal
+  { label: "Flights",      icon: "✈️", url: "https://tidd.ly/4uqgGmU" },
   { label: "Rental Cars",  icon: "🚗", url: "https://www.rentalcars.com/?aw_affid=2773070&source=aw" },
 ];
 

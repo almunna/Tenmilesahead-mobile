@@ -1,44 +1,122 @@
 /**
- * Geocoding utilities — delegates to the web app's /api/geocode server route.
- * The server handles Google Maps geocoding, fallback strategies, and in-memory caching.
+ * Geocoding utilities for the mobile app.
+ *
+ * Strategy:
+ *   1. Check in-memory cache (O(1), instant)
+ *   2. On first call, wait for AsyncStorage cache to load (~10-30ms)
+ *   3. Try the production /api/geocode endpoint (5s timeout, sends Referer so
+ *      the server's origin check allows it)
+ *   4. If the server fails or times out, fall back to Photon/OSM geocoding
+ *   5. Cache and optionally persist the result
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GEOCODE_API = 'https://tenmilesahead.com/api/geocode';
+const PHOTON_API  = 'https://photon.komoot.io/api/';
 const CACHE_STORAGE_KEY = '@tma_geocode_cache_v1';
 
-// In-memory cache — fast O(1) lookups
-const geocodeCache = new Map();
+// ─── In-memory cache ─────────────────────────────────────────────────────────
 
-// Load persisted cache from AsyncStorage on module init so subsequent app launches skip geocoding
-(async () => {
-  try {
-    const stored = await AsyncStorage.getItem(CACHE_STORAGE_KEY);
+const geocodeCache = new Map();
+let _cacheLoaded = false;
+
+// Save the promise so getCoordinates can await it before checking the cache.
+// This prevents the race condition where geocoding starts before AsyncStorage
+// has finished loading previously cached coordinates, causing unnecessary
+// network requests on every app launch.
+const _cacheReadyPromise = AsyncStorage.getItem(CACHE_STORAGE_KEY)
+  .then((stored) => {
     if (stored) {
       const entries = JSON.parse(stored);
-      for (const [k, v] of entries) geocodeCache.set(k, v);
+      for (const [k, v] of entries) {
+        if (v !== null) geocodeCache.set(k, v); // skip nulls — retry failed locations
+      }
     }
-  } catch {}
-})();
+  })
+  .catch(() => {})
+  .finally(() => { _cacheLoaded = true; });
 
-// Debounced persist — batches writes so we don't hit AsyncStorage on every single geocode
+// Debounced persist — batches writes so we don't hit AsyncStorage on every geocode
 let persistTimer = null;
 function schedulePersist() {
   if (persistTimer) return;
   persistTimer = setTimeout(async () => {
     persistTimer = null;
     try {
-      await AsyncStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify([...geocodeCache.entries()]));
+      const entries = [...geocodeCache.entries()].filter(([, v]) => v !== null);
+      await AsyncStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(entries));
     } catch {}
   }, 2000);
 }
+
+// ─── Provider implementations ─────────────────────────────────────────────────
+
+async function geocodeViaServer(address, city, state, country) {
+  const params = new URLSearchParams();
+  if (address) params.set('address', address);
+  if (city)    params.set('city', city);
+  if (state)   params.set('state', state);
+  if (country) params.set('country', country);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${GEOCODE_API}?${params.toString()}`, {
+      signal: controller.signal,
+      headers: {
+        // Referer makes the server's origin check treat this as an allowed
+        // request, same as a browser request from tenmilesahead.com
+        'Referer': 'https://tenmilesahead.com/',
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.coordinates || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function geocodeViaPhoton(address, city, state, country) {
+  // Build the most specific query possible, falling back to city+country
+  const parts = [address, city, state, country].filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const q = encodeURIComponent(parts.join(', '));
+    const response = await fetch(`${PHOTON_API}?q=${q}&limit=1&lang=en`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'TenMilesAhead-Mobile/1.0 (tenmilesahead.com)' },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const coords = data.features?.[0]?.geometry?.coordinates;
+    // Photon returns [longitude, latitude] — same format as our API
+    return Array.isArray(coords) && coords.length === 2 ? coords : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Get coordinates for a location.
  * Returns [longitude, latitude] or null.
  */
 export async function getCoordinates(address, city, state, country) {
+  // Ensure AsyncStorage cache is loaded before checking — prevents the race
+  // condition on app start that caused every launch to make network requests
+  // even for already-cached locations.
+  if (!_cacheLoaded) await _cacheReadyPromise;
+
   const parts = [address, city, state, country]
     .filter(Boolean)
     .map((s) => s.toLowerCase());
@@ -48,27 +126,15 @@ export async function getCoordinates(address, city, state, country) {
     return geocodeCache.get(cacheKey);
   }
 
-  try {
-    const params = new URLSearchParams();
-    if (address) params.set('address', address);
-    if (city) params.set('city', city);
-    if (state) params.set('state', state);
-    if (country) params.set('country', country);
-
-    const response = await fetch(`${GEOCODE_API}?${params.toString()}`);
-    if (!response.ok) {
-      geocodeCache.set(cacheKey, null);
-      return null;
-    }
-
-    const data = await response.json();
-    const coords = data.coordinates || null;
-    geocodeCache.set(cacheKey, coords);
-    schedulePersist();
-    return coords;
-  } catch {
-    return null;
+  // Try production API first, fall back to Photon/OSM if it fails or times out
+  let coords = await geocodeViaServer(address, city, state, country);
+  if (!coords) {
+    coords = await geocodeViaPhoton(address, city, state, country);
   }
+
+  geocodeCache.set(cacheKey, coords);
+  if (coords) schedulePersist();
+  return coords;
 }
 
 /**

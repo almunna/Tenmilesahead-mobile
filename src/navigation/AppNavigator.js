@@ -139,8 +139,8 @@ const navigationRef = createNavigationContainerRef();
 /* ── Tab dropdown items ── */
 const BOOK_ITEMS_DROPDOWN = [
   { label: "Cruises",     url: "https://www.cruisedirect.com/?utm_source=cj&utm_medium=affiliate&utm_content=101693012" },
-  { label: "Flights",     url: "https://tidd.ly/4uqgGmU" },
   { label: "eSIMs",       isEsim: true },
+  { label: "Flights",     url: "https://tidd.ly/4uqgGmU" },
   { label: "Rental Cars", url: "https://www.rentalcars.com/?aw_affid=2773070&source=aw" },
 ];
 

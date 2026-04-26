@@ -4,6 +4,8 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -144,7 +146,15 @@ export default function HelpSupportScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.pageTitle}>Help & Support</Text>
       <Text style={styles.pageSubtitle}>
         Find answers, watch tutorials, or reach out to our team.
@@ -269,6 +279,7 @@ export default function HelpSupportScreen({ navigation }) {
         )}
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

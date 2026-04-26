@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,13 @@ import { WebView } from "react-native-webview";
 import { COLORS, SPACING } from "../lib/constants";
 import { getCoordinates } from "../lib/geocoding";
 
-// Color coding for different types (matching web version)
 const PIN_COLORS = {
-  destination: { fill: "#DC2626", stroke: "#991B1B" }, // Red
-  activity: { fill: "#16a34a", stroke: "#15803d" }, // Green
-  restaurant: { fill: "#eab308", stroke: "#ca8a04" }, // Yellow
-  origin: { fill: "#9333ea", stroke: "#7e22ce" }, // Purple (starting point)
+  destination: { fill: "#DC2626", stroke: "#991B1B" },
+  activity: { fill: "#16a34a", stroke: "#15803d" },
+  restaurant: { fill: "#eab308", stroke: "#ca8a04" },
+  origin: { fill: "#9333ea", stroke: "#7e22ce" },
 };
 
-// Transportation mode icons (SVG paths from web version)
 const TRANSPORT_ICONS = {
   Airplane: `<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>`,
   "Boat/Ferry": `<path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.15.52-.06.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/>`,
@@ -31,6 +29,23 @@ const TRANSPORT_ICONS = {
   Other: `<circle cx="12" cy="12" r="8"/>`,
 };
 
+function createIconSVG(type, transportMode) {
+  const colors = PIN_COLORS[type];
+  const transportIcon =
+    transportMode && TRANSPORT_ICONS[transportMode]
+      ? TRANSPORT_ICONS[transportMode]
+      : "";
+  return `data:image/svg+xml;base64,${btoa(`
+    <svg width="32" height="42" viewBox="0 0 32 42" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 0C7.163 0 0 7.163 0 16c0 13 16 26 16 26s16-13 16-26C32 7.163 24.837 0 16 0z"
+        fill="${colors.fill}"
+        stroke="${colors.stroke}"
+        stroke-width="2"/>
+      <circle cx="16" cy="16" r="7" fill="white"/>
+      ${transportIcon ? `<g transform="translate(9, 9) scale(0.58)" fill="${colors.fill}">${transportIcon}</g>` : ""}
+    </svg>
+  `)}`;
+}
 
 export default function TripDetailMap({
   trip,
@@ -38,35 +53,45 @@ export default function TripDetailMap({
   activities,
   restaurants,
 }) {
-  const [loading, setLoading] = useState(true);
-  const [mapHTML, setMapHTML] = useState(null);
+  const [geocoding, setGeocoding] = useState(false);
 
-  // Generate map HTML asynchronously with real geocoding
+  const webViewRef = useRef(null);
+  const webViewReady = useRef(false);
+  const markerQueue = useRef(null);
+  const fetchId = useRef(0);
+
+  // Static HTML rendered once — markers are injected via JS after geocoding
+  const webViewSource = useMemo(() => ({ html: generateStaticMapHTML() }), []);
+
   useEffect(() => {
-    generateMapHTMLAsync();
+    fetchId.current += 1;
+    geocodeAndInject(fetchId.current);
   }, [trip, destinations, activities, restaurants]);
 
-  const createIconSVG = (type, transportMode) => {
-    const colors = PIN_COLORS[type];
-    const transportIcon = transportMode && TRANSPORT_ICONS[transportMode]
-      ? TRANSPORT_ICONS[transportMode]
-      : "";
-    return `data:image/svg+xml;base64,${btoa(`
-      <svg width="32" height="42" viewBox="0 0 32 42" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 0C7.163 0 0 7.163 0 16c0 13 16 26 16 26s16-13 16-26C32 7.163 24.837 0 16 0z"
-          fill="${colors.fill}"
-          stroke="${colors.stroke}"
-          stroke-width="2"/>
-        <circle cx="16" cy="16" r="7" fill="white"/>
-        ${transportIcon ? `<g transform="translate(9, 9) scale(0.58)" fill="${colors.fill}">${transportIcon}</g>` : ""}
-      </svg>
-    `)}`;
-  };
+  function handleWebViewLoad() {
+    webViewReady.current = true;
+    if (markerQueue.current !== null) {
+      doInjectMarkers(markerQueue.current);
+      markerQueue.current = null;
+    }
+  }
 
-  async function generateMapHTMLAsync() {
-    setLoading(true);
+  function doInjectMarkers(markers) {
+    if (!webViewRef.current) return;
+    webViewRef.current.injectJavaScript(
+      `window.setMarkers && window.setMarkers(${JSON.stringify(markers)}); true;`
+    );
+  }
 
-    // Collect all items to geocode
+  function injectMarkers(markers) {
+    if (!webViewReady.current) {
+      markerQueue.current = markers;
+      return;
+    }
+    doInjectMarkers(markers);
+  }
+
+  async function geocodeAndInject(currentFetchId) {
     const items = [];
 
     if (trip.originCity && trip.originCountry) {
@@ -133,19 +158,33 @@ export default function TripDetailMap({
       });
     }
 
-    // Geocode all locations in parallel — shared server cache makes this fast
+    if (items.length === 0) {
+      injectMarkers([]);
+      return;
+    }
+
+    setGeocoding(true);
+
     const results = await Promise.allSettled(
       items.map(async (item) => {
-        const coords = await getCoordinates(item.address, item.city, item.state, item.country);
+        const coords = await getCoordinates(
+          item.address,
+          item.city,
+          item.state,
+          item.country
+        );
         return coords ? { ...item, coords } : null;
       })
     );
 
+    if (fetchId.current !== currentFetchId) return;
+
     const markers = results
       .filter((r) => r.status === "fulfilled" && r.value !== null)
       .map((r) => {
-        const { coords, type, name, city, state, country, transportMode, startDate } = r.value;
-        const [lng, lat] = coords; // getCoordinates returns [longitude, latitude]
+        const { coords, type, name, city, state, country, transportMode, startDate } =
+          r.value;
+        const [lng, lat] = coords;
         return {
           lat,
           lng,
@@ -158,195 +197,8 @@ export default function TripDetailMap({
         };
       });
 
-    const markersJSON = JSON.stringify(markers);
-
-    const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-    html, body {
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      background: #fff;
-      position: fixed;
-      touch-action: none;
-    }
-    #map {
-      height: 100%;
-      width: 100%;
-      background: #aad3df;
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-    }
-    .leaflet-container {
-      background: #aad3df !important;
-      touch-action: pan-x pan-y;
-    }
-    .leaflet-tile {
-      opacity: 1 !important;
-    }
-    .leaflet-control-attribution {
-      display: none !important;
-    }
-    .leaflet-popup-content-wrapper {
-      background: #2c3e50;
-      color: white;
-      border-radius: 8px;
-    }
-    .leaflet-popup-content {
-      margin: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    .popup-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .popup-location {
-      font-size: 12px;
-      opacity: 0.9;
-      margin-bottom: 2px;
-    }
-    .popup-badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-      margin-top: 4px;
-    }
-    .leaflet-popup-tip {
-      background: #2c3e50;
-    }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script>
-    const markers = ${markersJSON};
-
-    // Create map
-    const map = L.map('map', {
-      zoomControl: true,
-      attributionControl: false,
-      preferCanvas: false,
-      fadeAnimation: true,
-      zoomAnimation: true,
-      minZoom: 2,
-      worldCopyJump: true,
-      maxBounds: [[-85, -Infinity], [85, Infinity]],
-      maxBoundsViscosity: 1.0
-    }).setView([20, 0], 2);
-
-    // Add Google Maps tiles
-    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=en', {
-      attribution: '',
-      maxZoom: 20,
-      minZoom: 2,
-      keepBuffer: 4,
-      updateWhenIdle: false,
-      updateWhenZooming: false,
-      crossOrigin: true
-    }).addTo(map);
-
-    const bounds = [];
-    const colorMap = {
-      origin: '#9333ea',
-      destination: '#DC2626',
-      activity: '#16a34a',
-      restaurant: '#eab308'
-    };
-
-    // Sort markers chronologically by startDate
-    const sortedMarkers = [...markers].sort((a, b) => {
-      if (!a.startDate || !b.startDate) return 0;
-      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
-    });
-
-    // Add markers
-    sortedMarkers.forEach((marker, index) => {
-      const icon = L.icon({
-        iconUrl: marker.iconUrl,
-        iconSize: [32, 42],
-        iconAnchor: [16, 42],
-        popupAnchor: [0, -42],
-      });
-
-      // Give origin (starting point) higher z-index to show on top when overlapping
-      const zIndexOffset = marker.type === 'origin' ? 1000 : 0;
-      const m = L.marker([marker.lat, marker.lng], { icon, zIndexOffset }).addTo(map);
-
-      const typeLabel = marker.type.charAt(0).toUpperCase() + marker.type.slice(1);
-      const color = colorMap[marker.type];
-      const transportBadge = marker.transportMode
-        ? \`<div class="popup-badge" style="background: \${color}; color: white;">\${marker.transportMode}</div>\`
-        : '';
-
-      m.bindPopup(\`
-        <div style="padding: 8px; min-width: 150px;">
-          <div class="popup-title" style="color: \${color};">\${typeLabel}</div>
-          <div class="popup-location">\${marker.name}</div>
-          <div class="popup-location" style="font-size: 11px;">\${marker.location}</div>
-          \${transportBadge}
-        </div>
-      \`);
-
-      bounds.push([marker.lat, marker.lng]);
-    });
-
-    // Draw chronological connecting lines
-    if (sortedMarkers.length > 1) {
-      for (let i = 1; i < sortedMarkers.length; i++) {
-        const prev = sortedMarkers[i - 1];
-        const curr = sortedMarkers[i];
-
-        const color = i === 1 && prev.type === 'origin' ? '#9333ea' : '#DC2626';
-
-        L.polyline(
-          [[prev.lat, prev.lng], [curr.lat, curr.lng]],
-          {
-            color: color,
-            weight: 2,
-            opacity: 0.6,
-            dashArray: '8, 8'
-          }
-        ).addTo(map);
-      }
-    }
-
-    // Fit map to show all markers
-    if (bounds.length > 0) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 10 });
-    }
-
-    // Force map to recalculate size
-    setTimeout(() => {
-      if (map) {
-        map.invalidateSize();
-      }
-    }, 200);
-  </script>
-</body>
-</html>
-    `;
-
-    setMapHTML(html);
-    setLoading(false);
+    injectMarkers(markers);
+    setGeocoding(false);
   }
 
   const hasContent =
@@ -355,9 +207,7 @@ export default function TripDetailMap({
     restaurants.length > 0 ||
     (trip.originCity && trip.originCountry);
 
-  if (!hasContent) {
-    return null;
-  }
+  if (!hasContent) return null;
 
   return (
     <View style={styles.container}>
@@ -367,7 +217,6 @@ export default function TripDetailMap({
         by date.
       </Text>
 
-      {/* Legend */}
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: "#9333ea" }]} />
@@ -387,33 +236,159 @@ export default function TripDetailMap({
         </View>
       </View>
 
-      {/* Map WebView */}
       <View style={styles.mapContainer}>
-        {loading || !mapHTML ? (
-          <View style={styles.webviewLoading}>
+        <WebView
+          ref={webViewRef}
+          originWhitelist={["*"]}
+          source={webViewSource}
+          style={styles.webview}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={true}
+          scrollEnabled={true}
+          nestedScrollEnabled={true}
+          onLoadEnd={handleWebViewLoad}
+          renderLoading={() => (
+            <View style={styles.webviewLoading}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          )}
+        />
+        {geocoding && (
+          <View style={styles.geocodingOverlay}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading map locations...</Text>
+            <Text style={styles.geocodingText}>Loading pins...</Text>
           </View>
-        ) : (
-          <WebView
-            originWhitelist={["*"]}
-            source={{ html: mapHTML }}
-            style={styles.webview}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={true}
-            scrollEnabled={true}
-            nestedScrollEnabled={true}
-            renderLoading={() => (
-              <View style={styles.webviewLoading}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-              </View>
-            )}
-          />
         )}
       </View>
     </View>
   );
+}
+
+function generateStaticMapHTML() {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    html, body { height: 100%; width: 100%; overflow: hidden; background: #fff; position: fixed; touch-action: none; }
+    #map { height: 100%; width: 100%; background: #aad3df; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    .leaflet-container { background: #aad3df !important; touch-action: pan-x pan-y; }
+    .leaflet-tile { opacity: 1 !important; }
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-popup-content-wrapper { background: #2c3e50; color: white; border-radius: 8px; }
+    .leaflet-popup-content { margin: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .popup-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .popup-location { font-size: 12px; opacity: 0.9; margin-bottom: 2px; }
+    .popup-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-top: 4px; }
+    .leaflet-popup-tip { background: #2c3e50; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map', {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: false,
+      fadeAnimation: true,
+      zoomAnimation: true,
+      minZoom: 2,
+      worldCopyJump: true,
+      maxBounds: [[-85, -Infinity], [85, Infinity]],
+      maxBoundsViscosity: 1.0
+    }).setView([20, 0], 2);
+
+    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=en', {
+      attribution: '',
+      maxZoom: 20,
+      minZoom: 2,
+      keepBuffer: 4,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      crossOrigin: true
+    }).addTo(map);
+
+    setTimeout(function() { map.invalidateSize(); }, 200);
+
+    var _markers = [];
+    var _polylines = [];
+    var colorMap = {
+      origin: '#9333ea',
+      destination: '#DC2626',
+      activity: '#16a34a',
+      restaurant: '#eab308'
+    };
+
+    window.setMarkers = function(markers) {
+      _markers.forEach(function(m) { m.remove(); });
+      _polylines.forEach(function(p) { p.remove(); });
+      _markers = [];
+      _polylines = [];
+
+      if (!markers || markers.length === 0) return;
+
+      var bounds = [];
+      var sortedMarkers = markers.slice().sort(function(a, b) {
+        if (!a.startDate || !b.startDate) return 0;
+        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      });
+
+      sortedMarkers.forEach(function(marker) {
+        var icon = L.icon({
+          iconUrl: marker.iconUrl,
+          iconSize: [32, 42],
+          iconAnchor: [16, 42],
+          popupAnchor: [0, -42]
+        });
+        var zIndexOffset = marker.type === 'origin' ? 1000 : 0;
+        var m = L.marker([marker.lat, marker.lng], { icon: icon, zIndexOffset: zIndexOffset }).addTo(map);
+
+        var typeLabel = marker.type.charAt(0).toUpperCase() + marker.type.slice(1);
+        var color = colorMap[marker.type];
+        var transportBadge = marker.transportMode
+          ? '<div class="popup-badge" style="background: ' + color + '; color: white;">' + marker.transportMode + '</div>'
+          : '';
+
+        m.bindPopup(
+          '<div style="padding: 8px; min-width: 150px;">' +
+          '<div class="popup-title" style="color: ' + color + ';">' + typeLabel + '</div>' +
+          '<div class="popup-location">' + (marker.name || '') + '</div>' +
+          '<div class="popup-location" style="font-size: 11px;">' + marker.location + '</div>' +
+          transportBadge +
+          '</div>'
+        );
+
+        _markers.push(m);
+        bounds.push([marker.lat, marker.lng]);
+      });
+
+      if (sortedMarkers.length > 1) {
+        for (var i = 1; i < sortedMarkers.length; i++) {
+          var prev = sortedMarkers[i - 1];
+          var curr = sortedMarkers[i];
+          var color = (i === 1 && prev.type === 'origin') ? '#9333ea' : '#DC2626';
+          var p = L.polyline([[prev.lat, prev.lng], [curr.lat, curr.lng]], {
+            color: color, weight: 2, opacity: 0.6, dashArray: '8, 8'
+          }).addTo(map);
+          _polylines.push(p);
+        }
+      }
+
+      if (bounds.length === 1) {
+        map.setView(bounds[0], 8);
+      } else if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 10 });
+      }
+    };
+  </script>
+</body>
+</html>
+  `;
 }
 
 const styles = StyleSheet.create({
@@ -474,9 +449,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: COLORS.surfaceLight,
   },
-  loadingText: {
-    marginTop: SPACING.sm,
-    fontSize: 12,
-    color: COLORS.muted,
+  geocodingOverlay: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(44, 62, 80, 0.85)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6,
+  },
+  geocodingText: {
+    color: "#FFFFFF",
+    fontSize: 11,
   },
 });
