@@ -235,7 +235,7 @@ const ItineraryCard = React.memo(function ItineraryCard({
           onPress={() => onSearch({ name: item.name, location: [item.city, item.state, item.country].filter(Boolean).join(", ") })}
         >
           <Ionicons name="search-outline" size={15} color={COLORS.primary} />
-          <Text style={styles.itinActionLabel}>Search</Text>
+          <Text style={styles.itinActionLabel}>Local</Text>
         </TouchableOpacity>
         {!!(item.city || item.country) && (
           <TouchableOpacity style={styles.itinActionBtn} onPress={() => onWeather({ name: item.name, location: item.city || item.country })}>

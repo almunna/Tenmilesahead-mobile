@@ -536,7 +536,7 @@ export default function ItineraryModal({ tripId, visible, onClose }) {
             }
           >
             <Ionicons name="search-outline" size={15} color={COLORS.primary} />
-            <Text style={styles.actionLabel}>Search</Text>
+            <Text style={styles.actionLabel}>Local</Text>
           </TouchableOpacity>
 
           {!!(item.city || item.country) && (

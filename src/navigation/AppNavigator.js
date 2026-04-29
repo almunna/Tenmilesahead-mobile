@@ -153,7 +153,7 @@ const TOOLS_ITEMS = [
 ];
 
 /* ── Bottom-sheet dropdown shown when Book / Tools tab is tapped ── */
-function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, androidTop, onEsimOpen }) {
+function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, androidTop, onEsimOpen, disclaimer }) {
   if (!visible) return null;
 
   const handleItem = (item) => {
@@ -204,6 +204,9 @@ function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, and
               <Text style={sheetStyles.itemArrow}>{item.url ? "↗" : "›"}</Text>
             </TouchableOpacity>
           ))}
+          {disclaimer && (
+            <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>
+          )}
         </AnimatedSheet>
       </>
     );
@@ -222,6 +225,9 @@ function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, and
               <Text style={sheetStyles.itemArrow}>{item.url ? "↗" : "›"}</Text>
             </TouchableOpacity>
           ))}
+          {disclaimer && (
+            <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>
+          )}
         </AnimatedSheet>
       </View>
     </Modal>
@@ -515,6 +521,7 @@ function AuthenticatedTabs() {
         isAuthenticated
         androidTop={androidNavHeight}
         onEsimOpen={() => setEsimOpen(true)}
+        disclaimer="TMA may receive a small commission for any booking made using the links above."
       />
       <TabDropdownSheet
         visible={activeDropdown === "tools"}
@@ -691,6 +698,7 @@ function UnauthenticatedTabs() {
         isAuthenticated={false}
         androidTop={androidNavHeight}
         onEsimOpen={() => setEsimOpen(true)}
+        disclaimer="TMA may receive a small commission for any booking made using the links above."
       />
       <TabDropdownSheet
         visible={activeDropdown === "tools"}
@@ -956,5 +964,12 @@ const sheetStyles = StyleSheet.create({
   itemArrow: {
     fontSize: scaleFontSize(15),
     color: COLORS.muted,
+  },
+  disclaimer: {
+    fontSize: scaleFontSize(9.5),
+    color: COLORS.muted,
+    paddingHorizontal: scaleSpacing(14),
+    paddingVertical: scaleSpacing(8),
+    lineHeight: scaleFontSize(13),
   },
 });
