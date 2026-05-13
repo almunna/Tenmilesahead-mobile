@@ -203,7 +203,7 @@ export default function AddTripModal({ visible, onClose, onCreated }) {
   }
 
   // ── Address autocomplete (Google Places API) ─────────────────────────────
-  const PLACES_KEY = "AIzaSyCYnlpsu8WOAu2Z0sW_ngZgxxW8UNbOwbw";
+  const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
   function handleAddressInput(text) {
     setForm((prev) => ({ ...prev, originAddress: text }));

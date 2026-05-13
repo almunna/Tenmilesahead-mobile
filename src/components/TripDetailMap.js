@@ -61,7 +61,7 @@ export default function TripDetailMap({
   const fetchId = useRef(0);
 
   // Static HTML rendered once — markers are injected via JS after geocoding
-  const webViewSource = useMemo(() => ({ html: generateStaticMapHTML() }), []);
+  const webViewSource = useMemo(() => ({ html: generateStaticMapHTML(process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY) }), []);
 
   useEffect(() => {
     fetchId.current += 1;
@@ -210,113 +210,57 @@ export default function TripDetailMap({
   if (!hasContent) return null;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Trip Map</Text>
-      <Text style={styles.subtitle}>
-        Pin drops for your trip locations. Lines show chronological travel path
-        by date.
-      </Text>
-
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#9333ea" }]} />
-          <Text style={styles.legendText}>Starting Point</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#DC2626" }]} />
-          <Text style={styles.legendText}>Destination</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#16a34a" }]} />
-          <Text style={styles.legendText}>Activity</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: "#eab308" }]} />
-          <Text style={styles.legendText}>Restaurant</Text>
-        </View>
-      </View>
-
-      <View style={styles.mapContainer}>
-        <WebView
-          ref={webViewRef}
-          originWhitelist={["*"]}
-          source={webViewSource}
-          style={styles.webview}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          scrollEnabled={true}
-          nestedScrollEnabled={true}
-          onLoadEnd={handleWebViewLoad}
-          renderLoading={() => (
-            <View style={styles.webviewLoading}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            </View>
-          )}
-        />
-        {geocoding && (
-          <View style={styles.geocodingOverlay}>
+    <View style={styles.mapContainer}>
+      <WebView
+        ref={webViewRef}
+        originWhitelist={["*"]}
+        source={webViewSource}
+        style={styles.webview}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        startInLoadingState={true}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
+        onLoadEnd={handleWebViewLoad}
+        renderLoading={() => (
+          <View style={styles.webviewLoading}>
             <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.geocodingText}>Loading pins...</Text>
           </View>
         )}
-      </View>
+      />
+      {geocoding && (
+        <View style={styles.geocodingOverlay}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.geocodingText}>Loading pins...</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-function generateStaticMapHTML() {
+function generateStaticMapHTML(apiKey) {
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-    html, body { height: 100%; width: 100%; overflow: hidden; background: #fff; position: fixed; touch-action: none; }
-    #map { height: 100%; width: 100%; background: #aad3df; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-    .leaflet-container { background: #aad3df !important; touch-action: pan-x pan-y; }
-    .leaflet-tile { opacity: 1 !important; }
-    .leaflet-control-attribution { display: none !important; }
-    .leaflet-popup-content-wrapper { background: #2c3e50; color: white; border-radius: 8px; }
-    .leaflet-popup-content { margin: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .popup-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    .popup-location { font-size: 12px; opacity: 0.9; margin-bottom: 2px; }
-    .popup-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-top: 4px; }
-    .leaflet-popup-tip { background: #2c3e50; }
+    html, body { height: 100%; width: 100%; overflow: hidden; background: #e8eaed; position: fixed; touch-action: none; }
+    #map { height: 100%; width: 100%; position: absolute; top: 0; left: 0; }
+    .info-type { font-size: 13px; font-weight: 600; margin-bottom: 3px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .info-name { font-size: 12px; color: #333; margin-bottom: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .info-location { font-size: 11px; color: #666; margin-bottom: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .info-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    var map = L.map('map', {
-      zoomControl: true,
-      attributionControl: false,
-      preferCanvas: false,
-      fadeAnimation: true,
-      zoomAnimation: true,
-      minZoom: 2,
-      worldCopyJump: true,
-      maxBounds: [[-85, -Infinity], [85, Infinity]],
-      maxBoundsViscosity: 1.0
-    }).setView([20, 0], 2);
-
-    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=en', {
-      attribution: '',
-      maxZoom: 20,
-      minZoom: 2,
-      keepBuffer: 4,
-      updateWhenIdle: false,
-      updateWhenZooming: false,
-      crossOrigin: true
-    }).addTo(map);
-
-    setTimeout(function() { map.invalidateSize(); }, 200);
-
+    var map;
     var _markers = [];
     var _polylines = [];
+    var _pendingMarkers = null;
     var colorMap = {
       origin: '#9333ea',
       destination: '#DC2626',
@@ -324,111 +268,101 @@ function generateStaticMapHTML() {
       restaurant: '#eab308'
     };
 
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 20, lng: 0 },
+        zoom: 2,
+        minZoom: 2,
+        mapTypeId: 'roadmap',
+        gestureHandling: 'greedy',
+        zoomControl: true,
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+          style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+          position: google.maps.ControlPosition.BOTTOM_LEFT,
+        },
+        streetViewControl: false,
+        fullscreenControl: false
+      });
+      if (_pendingMarkers !== null) {
+        window.setMarkers(_pendingMarkers);
+        _pendingMarkers = null;
+      }
+    }
+
     window.setMarkers = function(markers) {
-      _markers.forEach(function(m) { m.remove(); });
-      _polylines.forEach(function(p) { p.remove(); });
+      if (!map) { _pendingMarkers = markers; return; }
+      _markers.forEach(function(m) { m.setMap(null); });
+      _polylines.forEach(function(p) { p.setMap(null); });
       _markers = [];
       _polylines = [];
 
       if (!markers || markers.length === 0) return;
 
-      var bounds = [];
+      var bounds = new google.maps.LatLngBounds();
       var sortedMarkers = markers.slice().sort(function(a, b) {
         if (!a.startDate || !b.startDate) return 0;
         return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
       });
 
       sortedMarkers.forEach(function(marker) {
-        var icon = L.icon({
-          iconUrl: marker.iconUrl,
-          iconSize: [32, 42],
-          iconAnchor: [16, 42],
-          popupAnchor: [0, -42]
-        });
-        var zIndexOffset = marker.type === 'origin' ? 1000 : 0;
-        var m = L.marker([marker.lat, marker.lng], { icon: icon, zIndexOffset: zIndexOffset }).addTo(map);
-
-        var typeLabel = marker.type.charAt(0).toUpperCase() + marker.type.slice(1);
+        var pos = { lat: marker.lat, lng: marker.lng };
         var color = colorMap[marker.type];
-        var transportBadge = marker.transportMode
-          ? '<div class="popup-badge" style="background: ' + color + '; color: white;">' + marker.transportMode + '</div>'
+        var gMarker = new google.maps.Marker({
+          position: pos,
+          map: map,
+          zIndex: marker.type === 'origin' ? 1000 : 1,
+          icon: { url: marker.iconUrl, scaledSize: new google.maps.Size(32, 42), anchor: new google.maps.Point(16, 42) }
+        });
+        var typeLabel = marker.type.charAt(0).toUpperCase() + marker.type.slice(1);
+        var badge = marker.transportMode
+          ? '<span class="info-badge" style="background:' + color + ';">' + marker.transportMode + '</span>'
           : '';
-
-        m.bindPopup(
-          '<div style="padding: 8px; min-width: 150px;">' +
-          '<div class="popup-title" style="color: ' + color + ';">' + typeLabel + '</div>' +
-          '<div class="popup-location">' + (marker.name || '') + '</div>' +
-          '<div class="popup-location" style="font-size: 11px;">' + marker.location + '</div>' +
-          transportBadge +
-          '</div>'
-        );
-
-        _markers.push(m);
-        bounds.push([marker.lat, marker.lng]);
+        var content = '<div style="min-width:150px;padding:4px;">' +
+          '<div class="info-type" style="color:' + color + ';">' + typeLabel + '</div>' +
+          (marker.name ? '<div class="info-name">' + marker.name + '</div>' : '') +
+          '<div class="info-location">' + marker.location + '</div>' +
+          badge + '</div>';
+        var infoWindow = new google.maps.InfoWindow({ content: content });
+        gMarker.addListener('click', function() { infoWindow.open({ map: map, anchor: gMarker }); });
+        _markers.push(gMarker);
+        bounds.extend(pos);
       });
 
-      if (sortedMarkers.length > 1) {
-        for (var i = 1; i < sortedMarkers.length; i++) {
-          var prev = sortedMarkers[i - 1];
-          var curr = sortedMarkers[i];
-          var color = (i === 1 && prev.type === 'origin') ? '#9333ea' : '#DC2626';
-          var p = L.polyline([[prev.lat, prev.lng], [curr.lat, curr.lng]], {
-            color: color, weight: 2, opacity: 0.6, dashArray: '8, 8'
-          }).addTo(map);
-          _polylines.push(p);
-        }
+      for (var i = 1; i < sortedMarkers.length; i++) {
+        var prev = sortedMarkers[i - 1];
+        var curr = sortedMarkers[i];
+        var lineColor = (i === 1 && prev.type === 'origin') ? '#9333ea' : '#DC2626';
+        var polyline = new google.maps.Polyline({
+          path: [{ lat: prev.lat, lng: prev.lng }, { lat: curr.lat, lng: curr.lng }],
+          geodesic: true,
+          strokeColor: lineColor,
+          strokeOpacity: 0,
+          strokeWeight: 2,
+          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.6, scale: 2 }, offset: '0', repeat: '12px' }],
+          map: map
+        });
+        _polylines.push(polyline);
       }
 
-      if (bounds.length === 1) {
-        map.setView(bounds[0], 8);
-      } else if (bounds.length > 1) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 10 });
+      if (_markers.length === 1) {
+        map.setCenter(bounds.getCenter());
+        map.setZoom(8);
+      } else if (_markers.length > 1) {
+        map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+        google.maps.event.addListenerOnce(map, 'bounds_changed', function() {
+          if (map.getZoom() > 10) map.setZoom(10);
+        });
       }
     };
   </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap" async defer></script>
 </body>
 </html>
   `;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: SPACING.md,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.foreground,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginBottom: SPACING.sm,
-  },
-  legend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendText: {
-    fontSize: 10,
-    color: COLORS.muted,
-  },
   mapContainer: {
     height: 300,
     backgroundColor: COLORS.surfaceLight,

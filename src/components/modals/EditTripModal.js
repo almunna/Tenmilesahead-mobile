@@ -44,7 +44,7 @@ import DatePicker from "../DatePicker";
 import { COLORS, SPACING, TRANSPORT_OPTIONS, scaleFontSize, scaleSpacing, API_BASE_URL } from "../../lib/constants";
 import { getCruiseLineNames, getShipsForCruiseLine } from "../../lib/cruiseData";
 
-const PLACES_KEY = "AIzaSyCYnlpsu8WOAu2Z0sW_ngZgxxW8UNbOwbw";
+const PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 const OTHER_CRUISE_LINE = "Other";
 

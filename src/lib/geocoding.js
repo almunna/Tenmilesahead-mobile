@@ -5,16 +5,19 @@
  *   1. Check in-memory cache (O(1), instant)
  *   2. On first call, wait for AsyncStorage cache to load (~10-30ms)
  *   3. Try the production /api/geocode endpoint (5s timeout, sends Referer so
- *      the server's origin check allows it)
- *   4. If the server fails or times out, fall back to Photon/OSM geocoding
- *   5. Cache and optionally persist the result
+ *      the server's origin check allows it) — same server-side Google key as web
+ *   4. If the server fails or times out, fall back to direct Google Geocoding API
+ *   5. If Google direct also fails, fall back to Photon/OSM geocoding
+ *   6. Cache and optionally persist the result
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const GEOCODE_API = 'https://tenmilesahead.com/api/geocode';
-const PHOTON_API  = 'https://photon.komoot.io/api/';
-const CACHE_STORAGE_KEY = '@tma_geocode_cache_v1';
+const WEB_GEOCODE_API  = 'https://tenmilesahead.com/api/geocode';
+const GOOGLE_GEOCODE_API = 'https://maps.googleapis.com/maps/api/geocode/json';
+const PHOTON_API   = 'https://photon.komoot.io/api/';
+// v2: bumped to clear stale Photon/OSM coords cached under v1
+const CACHE_STORAGE_KEY = '@tma_geocode_cache_v2';
 
 // ─── In-memory cache ─────────────────────────────────────────────────────────
 
@@ -52,27 +55,53 @@ function schedulePersist() {
 
 // ─── Provider implementations ─────────────────────────────────────────────────
 
-async function geocodeViaServer(address, city, state, country) {
-  const params = new URLSearchParams();
-  if (address) params.set('address', address);
-  if (city)    params.set('city', city);
-  if (state)   params.set('state', state);
-  if (country) params.set('country', country);
+// Primary: call the production web API — uses the same server-side Google key
+// and normalization as the web app, guaranteeing identical coordinates.
+async function geocodeViaWebApi(city, state, country) {
+  if (!city && !country) return null;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch(`${GEOCODE_API}?${params.toString()}`, {
+    const params = new URLSearchParams();
+    if (city) params.set('city', city);
+    if (state) params.set('state', state);
+    if (country) params.set('country', country);
+    const response = await fetch(`${WEB_GEOCODE_API}?${params.toString()}`, {
       signal: controller.signal,
-      headers: {
-        // Referer makes the server's origin check treat this as an allowed
-        // request, same as a browser request from tenmilesahead.com
-        'Referer': 'https://tenmilesahead.com/',
-      },
+      headers: { Referer: 'https://tenmilesahead.com/' },
     });
     if (!response.ok) return null;
     const data = await response.json();
-    return data.coordinates || null;
+    return Array.isArray(data?.coordinates) && data.coordinates.length === 2
+      ? data.coordinates
+      : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function geocodeViaGoogle(address, city, state, country) {
+  const parts = [address, city, state, country].filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const key = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
+  if (!key) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const params = new URLSearchParams({ address: parts.join(', '), key });
+    const response = await fetch(`${GOOGLE_GEOCODE_API}?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.status !== 'OK' || !data.results?.[0]) return null;
+    const loc = data.results[0].geometry.location;
+    return [loc.lng, loc.lat];
   } catch {
     return null;
   } finally {
@@ -126,11 +155,10 @@ export async function getCoordinates(address, city, state, country) {
     return geocodeCache.get(cacheKey);
   }
 
-  // Try production API first, fall back to Photon/OSM if it fails or times out
-  let coords = await geocodeViaServer(address, city, state, country);
-  if (!coords) {
-    coords = await geocodeViaPhoton(address, city, state, country);
-  }
+  // Web API (primary, matches web exactly) → Google direct (fallback) → Photon/OSM (last resort)
+  let coords = await geocodeViaWebApi(city, state, country);
+  if (!coords) coords = await geocodeViaGoogle(address, city, state, country);
+  if (!coords) coords = await geocodeViaPhoton(address, city, state, country);
 
   geocodeCache.set(cacheKey, coords);
   if (coords) schedulePersist();

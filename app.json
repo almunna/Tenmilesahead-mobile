@@ -33,7 +33,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.tenmilesahead.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",

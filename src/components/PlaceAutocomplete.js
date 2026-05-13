@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { COLORS, SPACING } from "../lib/constants";
 
-const GOOGLE_PLACES_API_KEY = "AIzaSyCYnlpsu8WOAu2Z0sW_ngZgxxW8UNbOwbw";
+const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY;
 
 export default function PlaceAutocomplete({
   value,

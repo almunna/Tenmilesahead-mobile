@@ -11,6 +11,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing, GOOGLE_OAUTH_CONFIG } from "../lib/constants";
@@ -28,6 +29,7 @@ export default function SigninScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -36,6 +38,21 @@ export default function SigninScreen({ navigation }) {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadSavedCredentials() {
+      try {
+        const savedEmail = await AsyncStorage.getItem("rememberedEmail");
+        const savedPassword = await AsyncStorage.getItem("rememberedPassword");
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+          setRememberMe(true);
+        }
+      } catch (_) {}
+    }
+    loadSavedCredentials();
+  }, []);
 
   // Google OAuth
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -100,6 +117,13 @@ export default function SigninScreen({ navigation }) {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      if (rememberMe) {
+        await AsyncStorage.setItem("rememberedEmail", email);
+        await AsyncStorage.setItem("rememberedPassword", password);
+      } else {
+        await AsyncStorage.removeItem("rememberedEmail");
+        await AsyncStorage.removeItem("rememberedPassword");
+      }
       // Navigation will be handled by auth state change
     } catch (err) {
       let message = "Sign in failed. Please try again.";
@@ -188,15 +212,28 @@ export default function SigninScreen({ navigation }) {
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.forgotButton}
-            onPress={() => {
-              setShowForgotPassword(true);
-              setResetEmail(email);
-            }}
-          >
-            <Text style={styles.forgotButtonText}>Forgot password?</Text>
-          </TouchableOpacity>
+          <View style={styles.rememberForgotRow}>
+            <TouchableOpacity
+              style={styles.rememberMeRow}
+              onPress={() => setRememberMe(!rememberMe)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.rememberMeText}>Remember me</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.forgotButton}
+              onPress={() => {
+                setShowForgotPassword(true);
+                setResetEmail(email);
+              }}
+            >
+              <Text style={styles.forgotButtonText}>Forgot password?</Text>
+            </TouchableOpacity>
+          </View>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
@@ -349,9 +386,41 @@ const styles = StyleSheet.create({
     fontSize: scaleFontSize(18),
     color: COLORS.muted,
   },
+  rememberForgotRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: scaleSpacing(SPACING.md),
+  },
+  rememberMeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  checkbox: {
+    width: scaleFontSize(20),
+    height: scaleFontSize(20),
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: scaleFontSize(4),
+    marginRight: scaleSpacing(SPACING.xs),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: scaleFontSize(13),
+    fontWeight: "700",
+    lineHeight: scaleFontSize(16),
+  },
+  rememberMeText: {
+    fontSize: scaleFontSize(14),
+    color: COLORS.foreground,
+  },
   forgotButton: {
     alignSelf: "flex-end",
-    marginBottom: scaleSpacing(SPACING.md),
   },
   forgotButtonText: {
     fontSize: scaleFontSize(14),

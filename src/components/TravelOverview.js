@@ -1,8 +1,8 @@
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { COLORS, SPACING, scaleFontSize, scaleSpacing } from "../lib/constants";
 
-export default function TravelOverview({ stats }) {
+function TravelOverview({ stats }) {
   return (
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>Your Travel Overview</Text>
@@ -138,19 +138,9 @@ export default function TravelOverview({ stats }) {
   );
 }
 
-function TransportStat({ icon, count, label }) {
-  return (
-    <View style={styles.transportStatCard}>
-      <Text style={styles.transportIcon}>{icon}</Text>
-      <View style={styles.transportInfo}>
-        <Text style={styles.transportCount}>{count}</Text>
-        <Text style={styles.transportLabel}>{label}</Text>
-      </View>
-    </View>
-  );
-}
+export default memo(TravelOverview);
 
-function AccommodationStat({ icon, count, label }) {
+const TransportStat = memo(function TransportStat({ icon, count, label }) {
   return (
     <View style={styles.transportStatCard}>
       <Text style={styles.transportIcon}>{icon}</Text>
@@ -160,7 +150,19 @@ function AccommodationStat({ icon, count, label }) {
       </View>
     </View>
   );
-}
+});
+
+const AccommodationStat = memo(function AccommodationStat({ icon, count, label }) {
+  return (
+    <View style={styles.transportStatCard}>
+      <Text style={styles.transportIcon}>{icon}</Text>
+      <View style={styles.transportInfo}>
+        <Text style={styles.transportCount}>{count}</Text>
+        <Text style={styles.transportLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

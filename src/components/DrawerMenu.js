@@ -27,26 +27,26 @@ export default function DrawerMenu({ visible, onClose }) {
   const { user, profile, signOutNow } = useAuth();
   const [expanded, setExpanded] = useState(null);
   const slideAnim = useRef(new Animated.Value(340)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 260,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: 0, duration: 260, useNativeDriver: true }),
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      ]).start();
     } else {
       slideAnim.setValue(340);
+      backdropOpacity.setValue(0);
       setExpanded(null);
     }
   }, [visible]);
 
   const close = () => {
-    Animated.timing(slideAnim, {
-      toValue: 340,
-      duration: 210,
-      useNativeDriver: true,
-    }).start(() => onClose());
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 340, duration: 210, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: 0, duration: 210, useNativeDriver: true }),
+    ]).start(() => onClose());
   };
 
   const goTo = (screen) => {
@@ -81,12 +81,14 @@ export default function DrawerMenu({ visible, onClose }) {
       onRequestClose={close}
     >
       <View style={styles.overlay}>
-        {/* Backdrop */}
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={close}
-        />
+        {/* Backdrop fades in/out with the drawer */}
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <TouchableOpacity
+            style={styles.backdropTap}
+            activeOpacity={1}
+            onPress={close}
+          />
+        </Animated.View>
 
         {/* Drawer panel slides from right */}
         <Animated.View
@@ -275,6 +277,9 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  backdropTap: {
+    flex: 1,
   },
   drawer: {
     width: "82%",

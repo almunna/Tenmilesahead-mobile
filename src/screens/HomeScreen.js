@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   RefreshControl,
   Image,
   Modal,
+  ActivityIndicator,
+  InteractionManager,
 } from "react-native";
 import CalendarPickerModal from "../components/CalendarPickerModal";
 import { useNavigation } from "@react-navigation/native";
@@ -172,6 +174,10 @@ export default function HomeScreen() {
     accommodationCounts: {},
   });
   const [statsVersion, setStatsVersion] = useState(0);
+  const statsVersionTimerRef = useRef(null);
+  const prevStatsTripsRef = useRef("");
+  const [showWorldMap, setShowWorldMap] = useState(false);
+  const worldMapRevealedRef = useRef(false);
 
   // Modal states
   const [selectedTrip, setSelectedTrip] = useState(null);
@@ -198,22 +204,11 @@ export default function HomeScreen() {
     !subscription?.cancelAtPeriodEnd &&
     subscription?.currentPeriodEnd > Date.now();
 
-  // Trip action handlers
-  function handleMenu(trip) {
-    setShowMenu(trip);
-  }
-
-  function handleEdit(trip) {
-    setEditingTrip(trip);
-  }
-
-  function handleShare(trip) {
-    setShareTrip(trip);
-  }
-
-  function handleDelete(trip) {
-    setDeleteTrip(trip);
-  }
+  // Trip action handlers — useCallback so TripCard receives stable references
+  const handleMenu = useCallback((trip) => setShowMenu(trip), []);
+  const handleEdit = useCallback((trip) => setEditingTrip(trip), []);
+  const handleShare = useCallback((trip) => setShareTrip(trip), []);
+  const handleDelete = useCallback((trip) => setDeleteTrip(trip), []);
 
   async function confirmDelete() {
     if (!deleteTrip) return;
@@ -283,56 +278,65 @@ export default function HomeScreen() {
     });
   }, [trips, dateFrom, dateTo]);
 
-  // Set up real-time listeners for all trip subcollections to trigger stats recalculation
+  // Set up real-time listeners for trip subcollections to trigger stats recalculation.
+  // Deferred via InteractionManager so the initial login navigation animation completes
+  // before we open N×4 Firestore connections. Media is excluded — photo count changes
+  // on the home screen are low priority and media subcollections can be very large.
   useEffect(() => {
     if (!user || filteredTrips.length === 0) return;
 
-    const unsubscribers = [];
+    const bumpStats = () => {
+      if (statsVersionTimerRef.current) clearTimeout(statsVersionTimerRef.current);
+      statsVersionTimerRef.current = setTimeout(
+        () => setStatsVersion((v) => v + 1),
+        1500,
+      );
+    };
 
-    // Listen to each filtered trip's subcollections
-    for (const trip of filteredTrips) {
-      // Destinations
-      unsubscribers.push(
-        onSnapshot(collection(db, "trips", trip.id, "destinations"), () => {
-          setStatsVersion((v) => v + 1);
-        }),
-      );
-      // Activities
-      unsubscribers.push(
-        onSnapshot(collection(db, "trips", trip.id, "activities"), () => {
-          setStatsVersion((v) => v + 1);
-        }),
-      );
-      // Accommodations
-      unsubscribers.push(
-        onSnapshot(collection(db, "trips", trip.id, "accommodations"), () => {
-          setStatsVersion((v) => v + 1);
-        }),
-      );
-      // Restaurants
-      unsubscribers.push(
-        onSnapshot(collection(db, "trips", trip.id, "restaurants"), () => {
-          setStatsVersion((v) => v + 1);
-        }),
-      );
-      // Media
-      unsubscribers.push(
-        onSnapshot(collection(db, "trips", trip.id, "media"), () => {
-          setStatsVersion((v) => v + 1);
-        }),
-      );
-    }
+    const unsubscribers = [];
+    let taskDone = false;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      taskDone = true;
+      for (const trip of filteredTrips) {
+        unsubscribers.push(onSnapshot(collection(db, "trips", trip.id, "destinations"),   bumpStats));
+        unsubscribers.push(onSnapshot(collection(db, "trips", trip.id, "activities"),     bumpStats));
+        unsubscribers.push(onSnapshot(collection(db, "trips", trip.id, "accommodations"), bumpStats));
+        unsubscribers.push(onSnapshot(collection(db, "trips", trip.id, "restaurants"),    bumpStats));
+      }
+    });
 
     return () => {
+      if (!taskDone) task.cancel();
       unsubscribers.forEach((unsub) => unsub());
+      if (statsVersionTimerRef.current) clearTimeout(statsVersionTimerRef.current);
     };
   }, [user, filteredTrips]);
 
-  // Calculate comprehensive travel stats
+  // Reveal WorldMap after the page has had time to render core content.
+  // The WebView is expensive — deferring it lets trips, stats, and the
+  // welcome section paint first so the screen feels instantly responsive.
+  useEffect(() => {
+    if (filteredTrips.length === 0 || worldMapRevealedRef.current) return;
+    worldMapRevealedRef.current = true;
+    const timer = setTimeout(() => setShowWorldMap(true), 1200);
+    return () => clearTimeout(timer);
+  }, [filteredTrips]);
+
+  // Calculate comprehensive travel stats.
+  // Wrapped in InteractionManager so any in-flight navigation tap / animation
+  // finishes before the heavy Firestore reads begin — keeps the UI responsive.
   useEffect(() => {
     if (!user) return;
 
-    const calculateStats = async () => {
+    let cancelled = false;
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      runCalculateStats();
+    });
+
+    const runCalculateStats = async () => {
       try {
         const cSet = new Set();
         const sSet = new Set();
@@ -343,7 +347,6 @@ export default function HomeScreen() {
         const transportCounts = {};
         const accommodationCounts = {};
 
-        // Exclude future trips — matches web's `t.startDate <= todayStr` filter
         const todayStr = new Date().toISOString().split("T")[0];
         const pastTrips = filteredTrips.filter(
           (t) => !t.startDate || t.startDate <= todayStr,
@@ -364,9 +367,6 @@ export default function HomeScreen() {
                 ) + 1;
               totalDays += days;
             }
-
-            // Use saved totalMiles for now — missing values filled in phase 2
-            totalMiles += t.totalMiles ?? 0;
 
             if (t.country) cSet.add(t.country);
             const isUSA =
@@ -467,26 +467,35 @@ export default function HomeScreen() {
           }),
         );
 
-        // Show stats immediately — no geocoding needed yet
-        const baseStats = {
+        // Determine whether the trip list itself changed.
+        // prevStatsTripsRef is only written after Phase 2 *completes* — if Phase 2
+        // is cancelled mid-run (effect cleanup), the ref stays at the old value so
+        // the next run still sees tripListChanged=true and retries geocoding.
+        const currentTripIds = pastTrips.map((t) => t.id).sort().join(",");
+        const tripListChanged = currentTripIds !== prevStatsTripsRef.current;
+
+        // Show stats immediately — no geocoding needed yet.
+        // Preserve totalMiles from previous state when Phase 2 will be skipped so
+        // navigating away and back doesn't flash the value back to 0.
+        if (cancelled) return;
+        setStats((prev) => ({
           totalTrips: pastTrips.length,
           daysExplored: totalDays,
           photosCaptured: imgTotal,
-          totalMiles: Math.round(totalMiles),
+          totalMiles: tripListChanged ? 0 : prev.totalMiles,
           countriesVisited: cSet.size,
           statesVisited: sSet.size,
           citiesVisited: citySet.size,
           transportationCounts: transportCounts,
           accommodationCounts: accommodationCounts,
-        };
-        setStats(baseStats);
+        }));
 
-        // PHASE 2: Compute missing miles in background using already-fetched destinations.
-        // Updates totalMiles in stats once geocoding resolves.
-        const tripsNeedingMiles = pastTrips.filter((t) => !t.totalMiles);
-        if (tripsNeedingMiles.length > 0) {
+        // PHASE 2: Compute miles for all trips — same logic as web, always recalculates.
+        // Only runs when the trip list changes; ref is written on completion so a
+        // cancelled run is automatically retried on the next effect fire.
+        if (tripListChanged && pastTrips.length > 0) {
           let additionalMiles = 0;
-          for (const t of tripsNeedingMiles) {
+          for (const t of pastTrips) {
             try {
               const destinations = tripDestinationsMap.get(t.id) || [];
               destinations.sort((a, b) =>
@@ -542,13 +551,17 @@ export default function HomeScreen() {
                 }
               }
               additionalMiles += tripMiles;
-              if (tripMiles > 0) {
-                updateDoc(doc(db, "trips", t.id), {
-                  totalMiles: Math.round(tripMiles),
-                }).catch(() => {});
+              // Save per-trip miles to Firestore so the badges screen can use
+              // them for Distance & Mileage badge evaluation — mirrors web behavior.
+              const rounded = Math.round(tripMiles);
+              if (rounded > 0 && rounded !== (t.totalMiles ?? 0)) {
+                updateDoc(doc(db, "trips", t.id), { totalMiles: rounded }).catch(() => {});
               }
             } catch {}
           }
+          if (cancelled) return;
+          // Mark completion so future runs with the same trips skip Phase 2.
+          prevStatsTripsRef.current = currentTripIds;
           if (additionalMiles > 0) {
             setStats((prev) => ({
               ...prev,
@@ -559,7 +572,10 @@ export default function HomeScreen() {
       } catch (error) {}
     };
 
-    calculateStats();
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
   }, [user, filteredTrips, statsVersion]);
 
   function onRefresh() {
@@ -631,6 +647,7 @@ export default function HomeScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
+      removeClippedSubviews={true}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -787,9 +804,13 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* World Map */}
+      {/* World Map — deferred so core content renders first */}
       {filteredTrips.length > 0 && (
-        <WorldMap trips={filteredTrips} user={user} />
+        showWorldMap
+          ? <WorldMap trips={filteredTrips} user={user} />
+          : <View style={styles.mapLoadingPlaceholder}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
       )}
 
       {/* Travel Overview Stats */}
@@ -885,11 +906,13 @@ export default function HomeScreen() {
       </View>
 
       {/* Modals */}
-      <EditTripModal
-        tripId={editingTrip?.id}
-        visible={!!editingTrip}
-        onClose={() => setEditingTrip(null)}
-      />
+      {editingTrip && (
+        <EditTripModal
+          tripId={editingTrip.id}
+          visible={true}
+          onClose={() => setEditingTrip(null)}
+        />
+      )}
 
       {shareTrip && (
         <ShareTripModal
@@ -1141,6 +1164,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 10,
     backgroundColor: COLORS.background,
+  },
+  mapLoadingPlaceholder: {
+    height: 220,
+    marginVertical: scaleSpacing(SPACING.md),
+    borderRadius: 12,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: "center",
+    alignItems: "center",
   },
   content: {
     padding: scaleSpacing(SPACING.md),

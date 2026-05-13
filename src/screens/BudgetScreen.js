@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   RefreshControl,
   ScrollView,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import {
   collection,
+  getDocs,
   getDocsFromServer,
   orderBy,
   query,
@@ -107,78 +109,94 @@ export default function BudgetScreen() {
     if (!user) return;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+
     try {
-      const q = query(
+      // ── Phase 1: trips + expenses (always fresh) ──────────────────────────────
+      // These are the core numbers — load them and show the page immediately.
+      const tripsSnap = await getDocsFromServer(query(
         collection(db, "trips"),
         where("ownerId", "==", user.uid),
         orderBy("startDate", "desc")
-      );
-      const tripsSnap = await getDocsFromServer(q);
+      ));
       const tripsData = tripsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setTrips(tripsData);
 
+      const expResults = await Promise.all(
+        tripsData.map((trip) =>
+          getDocsFromServer(collection(db, "trips", trip.id, "expenses"))
+            .catch(() => ({ docs: [] }))
+        )
+      );
       const expMap = {};
+      tripsData.forEach((trip, i) => {
+        expMap[trip.id] = expResults[i].docs.map((d) => ({ id: d.id, ...d.data() }));
+      });
+      setExpensesByTrip(expMap);
+
+      // Unlock the UI — the page renders now with real expense totals.
+      setLoading(false);
+      setRefreshing(false);
+
+      // ── Phase 2: supplementary place + extras amounts (cache-first, background) ─
+      // These refine the totals but aren't needed to paint the screen.
+      const empty = { docs: [] };
+      const phaseTwo = await Promise.all(
+        tripsData.map((trip) =>
+          Promise.all([
+            getDocs(collection(db, "trips", trip.id, "destinations")).catch(() => empty),
+            getDocs(collection(db, "trips", trip.id, "accommodations")).catch(() => empty),
+            getDocs(collection(db, "trips", trip.id, "activities")).catch(() => empty),
+            getDocs(collection(db, "trips", trip.id, "restaurants")).catch(() => empty),
+            getDocs(collection(db, "trips", trip.id, "extras")).catch(() => empty),
+          ])
+        )
+      );
+
       const placeMap = {};
       const extMap = {};
-      const PLACE_SUBS = ["destinations", "accommodations", "activities", "restaurants"];
-
-      for (const trip of tripsData) {
-        try {
-          const expSnap = await getDocsFromServer(collection(db, "trips", trip.id, "expenses"));
-          expMap[trip.id] = expSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        } catch (_) {
-          expMap[trip.id] = [];
-        }
+      tripsData.forEach((trip, i) => {
+        const [destSnap, accomSnap, actSnap, restSnap, extSnap] = phaseTwo[i];
 
         const tripPlaces = [];
-        for (const sub of PLACE_SUBS) {
-          try {
-            const snap = await getDocsFromServer(collection(db, "trips", trip.id, sub));
-            snap.forEach((d) => {
-              const data = d.data();
-              let amt = null;
-              if (data.budgetAmount && data.budgetAmount > 0) {
-                amt = data.budgetAmount;
-              } else if (data.notes) {
-                const m = /Amount:\s*\$?([\d,]+(?:\.\d+)?)/i.exec(data.notes);
-                if (m) amt = parseFloat(m[1].replace(/,/g, ""));
-              } else if (data.price && Number(data.price) > 0) {
-                amt = Number(data.price);
-              }
-              if (amt && amt > 0) {
-                tripPlaces.push({
-                  id: d.id,
-                  budgetAmount: Number(amt),
-                  budgetExpenseId: data.budgetExpenseId ?? null,
-                  budgetCurrency: data.budgetCurrency ?? "USD",
-                });
-              }
-            });
-          } catch (_) {}
-        }
-        placeMap[trip.id] = tripPlaces;
-
-        // Extras (Others section)
-        let extrasTotal = 0;
-        try {
-          const extSnap = await getDocsFromServer(collection(db, "trips", trip.id, "extras"));
-          extSnap.forEach((d) => {
-            const amt = d.data().amount;
-            if (amt) {
-              const cleaned = String(amt).replace(/[^0-9.]/g, "");
-              const n = parseFloat(cleaned);
-              if (!isNaN(n) && n > 0) extrasTotal += n;
+        [destSnap, accomSnap, actSnap, restSnap].forEach((snap) => {
+          snap.docs.forEach((d) => {
+            const data = d.data();
+            let amt = null;
+            if (data.budgetAmount && data.budgetAmount > 0) {
+              amt = data.budgetAmount;
+            } else if (data.notes) {
+              const m = /Amount:\s*\$?([\d,]+(?:\.\d+)?)/i.exec(data.notes);
+              if (m) amt = parseFloat(m[1].replace(/,/g, ""));
+            } else if (data.price && Number(data.price) > 0) {
+              amt = Number(data.price);
+            }
+            if (amt && amt > 0) {
+              tripPlaces.push({
+                id: d.id,
+                budgetAmount: Number(amt),
+                budgetExpenseId: data.budgetExpenseId ?? null,
+                budgetCurrency: data.budgetCurrency ?? "USD",
+              });
             }
           });
-        } catch (_) {}
-        extMap[trip.id] = extrasTotal;
-      }
+        });
+        placeMap[trip.id] = tripPlaces;
 
-      setExpensesByTrip(expMap);
+        let extrasTotal = 0;
+        extSnap.docs.forEach((d) => {
+          const amt = d.data().amount;
+          if (amt) {
+            const cleaned = String(amt).replace(/[^0-9.]/g, "");
+            const n = parseFloat(cleaned);
+            if (!isNaN(n) && n > 0) extrasTotal += n;
+          }
+        });
+        extMap[trip.id] = extrasTotal;
+      });
+
       setPlacesByTrip(placeMap);
       setExtrasByTrip(extMap);
     } catch (_) {
-    } finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -189,18 +207,13 @@ export default function BudgetScreen() {
   const spentByTrip = useMemo(() => {
     const map = {};
     for (const trip of trips) {
-      const tripCurrency = trip.budgetCurrency ?? "USD";
       const exps = expensesByTrip[trip.id] ?? [];
-      const matchedExps = exps.filter((e) => (e.currency ?? "USD") === tripCurrency);
-      const expTotal = matchedExps.reduce((s, e) => s + (e.amount ?? 0), 0);
-
-      // Add unlinked place amounts (same dedup logic as TripBudgetModal)
-      const expIds = new Set(matchedExps.map((e) => e.id));
-      const expAmts = new Set(matchedExps.map((e) => Math.round((e.amount ?? 0) * 100)));
+      const expTotal = exps.reduce((s, e) => s + (e.amount ?? 0), 0);
+      const expIds = new Set(exps.map((e) => e.id));
+      const expAmts = new Set(exps.map((e) => Math.round((e.amount ?? 0) * 100)));
       const places = placesByTrip[trip.id] ?? [];
       const placeTotal = places
         .filter((p) => {
-          if ((p.budgetCurrency ?? "USD") !== tripCurrency) return false;
           if (p.budgetExpenseId && expIds.has(p.budgetExpenseId)) return false;
           if (!p.budgetExpenseId && expAmts.has(Math.round(p.budgetAmount * 100))) return false;
           return true;
@@ -215,19 +228,16 @@ export default function BudgetScreen() {
   const expenseCountByTrip = useMemo(() => {
     const map = {};
     for (const trip of trips) {
-      const tripCurrency = trip.budgetCurrency ?? "USD";
       const exps = expensesByTrip[trip.id] ?? [];
-      const matchedExps = exps.filter((e) => (e.currency ?? "USD") === tripCurrency);
-      const expIds = new Set(matchedExps.map((e) => e.id));
-      const expAmts = new Set(matchedExps.map((e) => Math.round((e.amount ?? 0) * 100)));
+      const expIds = new Set(exps.map((e) => e.id));
+      const expAmts = new Set(exps.map((e) => Math.round((e.amount ?? 0) * 100)));
       const places = placesByTrip[trip.id] ?? [];
       const unlinkedPlaces = places.filter((p) => {
-        if ((p.budgetCurrency ?? "USD") !== tripCurrency) return false;
         if (p.budgetExpenseId && expIds.has(p.budgetExpenseId)) return false;
         if (!p.budgetExpenseId && expAmts.has(Math.round(p.budgetAmount * 100))) return false;
         return true;
       });
-      map[trip.id] = matchedExps.length + unlinkedPlaces.length;
+      map[trip.id] = exps.length + unlinkedPlaces.length;
     }
     return map;
   }, [trips, expensesByTrip, placesByTrip]);
@@ -247,6 +257,49 @@ export default function BudgetScreen() {
     return { totalBudgeted, totalSpent, remaining, usage, tripsWithBudget, expenseCount };
   }, [displayedTrips, spentByTrip, expenseCountByTrip]);
 
+  const renderTripCard = useCallback(({ item: trip }) => {
+    const spent = spentByTrip[trip.id] ?? 0;
+    const expCount = expenseCountByTrip[trip.id] ?? 0;
+    const budgeted = getTripBudget(trip) ?? 0;
+    const remaining = budgeted - spent;
+    const pct = budgeted > 0 ? Math.min((spent / budgeted) * 100, 100) : 0;
+    return (
+      <TouchableOpacity
+        style={styles.tripCard}
+        onPress={() => setBudgetModalTrip(trip)}
+        activeOpacity={0.75}
+      >
+        <View style={styles.tripTopRow}>
+          <View style={styles.tripInfo}>
+            <Text style={styles.tripName}>{trip.name}</Text>
+            <Text style={styles.tripMeta}>
+              {[trip.city, trip.country].filter(Boolean).join(", ")}
+              {trip.startDate ? `  ·  ${fmtDate(trip.startDate)} – ${fmtDate(trip.endDate)}` : ""}
+            </Text>
+          </View>
+          <Text style={styles.tripChevron}>›</Text>
+        </View>
+        <ProgressBar pct={pct} />
+        <View style={styles.statsRow}>
+          <Text style={styles.statText}>
+            {fmt(spent)}{budgeted > 0 ? ` of ${fmt(budgeted)}` : " (no budget set)"}
+          </Text>
+          {budgeted > 0 && <Text style={styles.statText}>{pct.toFixed(0)}% used</Text>}
+          {budgeted > 0 && (
+            <Text style={[styles.statTextBold, { color: remaining >= 0 ? COLORS.success : COLORS.error }]}>
+              {fmt(remaining)} {remaining >= 0 ? "left" : "over"}
+            </Text>
+          )}
+        </View>
+        <Text style={styles.expHint}>
+          {expCount > 0
+            ? `${expCount} expense${expCount === 1 ? "" : "s"} logged · tap to manage`
+            : "Tap to view details & add expenses"}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [spentByTrip, expenseCountByTrip]);
+
   if (!user) {
     return (
       <View style={styles.authPrompt}>
@@ -264,6 +317,73 @@ export default function BudgetScreen() {
     ? "All Trips"
     : trips.find((t) => t.id === selectedTripId)?.name ?? "All Trips";
 
+  const listHeader = (
+    <View>
+      {/* ── Header + trip selector ── */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
+          <Text style={styles.heading}>My Travel Budget</Text>
+          <Text style={styles.subheading}>Track spending across all your trips</Text>
+        </View>
+        <TouchableOpacity style={styles.tripSelector} onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
+          <Text style={styles.tripSelectorText} numberOfLines={1}>{selectedLabel}</Text>
+          <Text style={styles.tripSelectorChevron}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Summary cards ── */}
+      {loading ? (
+        <View style={styles.loader}>
+          <ActivityIndicator color={COLORS.primary} size="small" />
+          <Text style={styles.loaderText}>Loading budget data…</Text>
+        </View>
+      ) : (
+        <View style={styles.cardsGrid}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.cardLabel}>TOTAL BUDGETED</Text>
+            <Text style={styles.cardValue}>{fmt(stats.totalBudgeted)}</Text>
+            <Text style={styles.cardSub}>
+              {selectedTripId === "all"
+                ? `${stats.tripsWithBudget} ${stats.tripsWithBudget === 1 ? "trip" : "trips"} with budget`
+                : (getTripBudget(displayedTrips[0]) ? "budget set" : "no budget set")}
+            </Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.cardLabel}>TOTAL SPENT</Text>
+            <Text style={styles.cardValue}>{fmt(stats.totalSpent)}</Text>
+            <Text style={styles.cardSub}>{stats.expenseCount} {stats.expenseCount === 1 ? "expense" : "expenses"}</Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.cardLabel}>REMAINING</Text>
+            <Text style={[styles.cardValue, { color: stats.remaining >= 0 ? COLORS.success : COLORS.error }]}>
+              {fmt(stats.remaining)}
+            </Text>
+            <Text style={styles.cardSub}>
+              {stats.totalBudgeted === 0 ? "no budget set" : stats.remaining >= 0 ? "under budget" : "over budget"}
+            </Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.cardLabel}>OVERALL USAGE</Text>
+            <Text style={[styles.cardValue, { color: stats.usage > 90 ? COLORS.error : COLORS.success }]}>
+              {stats.usage.toFixed(0)}%
+            </Text>
+            <View style={styles.usageBarTrack}>
+              <View style={[styles.usageBarFill, { width: `${stats.usage}%`, backgroundColor: stats.usage > 90 ? COLORS.error : COLORS.success }]} />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* ── Section title (only when trips exist) ── */}
+      {!loading && displayedTrips.length > 0 && (
+        <Text style={styles.sectionTitle}>Your Trips</Text>
+      )}
+    </View>
+  );
+
   return (
     <>
       {/* Full trip budget modal */}
@@ -275,149 +395,40 @@ export default function BudgetScreen() {
         />
       )}
 
-      <ScrollView
+      <TripPickerModal
+        visible={pickerVisible}
+        trips={trips}
+        selectedId={selectedTripId}
+        onSelect={setSelectedTripId}
+        onClose={() => setPickerVisible(false)}
+      />
+
+      <FlatList
         style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        data={displayedTrips}
+        keyExtractor={(item) => item.id}
+        renderItem={renderTripCard}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>✈️</Text>
+              <Text style={styles.emptyTitle}>No trips yet</Text>
+              <Text style={styles.emptySub}>Add a trip to start tracking your budget</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate(SCREENS.TRIPS)}>
+                <Text style={styles.emptyBtnText}>Go to Trips</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null
+        }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor={COLORS.primary} />}
-      >
-        {/* ── Header + trip selector ── */}
-        <View style={styles.headerRow}>
-          <View style={styles.headerText}>
-            <Text style={styles.heading}>My Travel Budget</Text>
-            <Text style={styles.subheading}>Track spending across all your trips</Text>
-          </View>
-          <TouchableOpacity style={styles.tripSelector} onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.tripSelectorText} numberOfLines={1}>{selectedLabel}</Text>
-            <Text style={styles.tripSelectorChevron}>›</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Summary cards ── */}
-        {loading ? (
-          <View style={styles.loader}>
-            <ActivityIndicator color={COLORS.primary} size="small" />
-            <Text style={styles.loaderText}>Loading budget data…</Text>
-          </View>
-        ) : (
-          <View style={styles.cardsGrid}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>TOTAL BUDGETED</Text>
-              <Text style={styles.cardValue}>{fmt(stats.totalBudgeted)}</Text>
-              <Text style={styles.cardSub}>
-                {selectedTripId === "all"
-                  ? `${stats.tripsWithBudget} ${stats.tripsWithBudget === 1 ? "trip" : "trips"} with budget`
-                  : (getTripBudget(displayedTrips[0]) ? "budget set" : "no budget set")}
-              </Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>TOTAL SPENT</Text>
-              <Text style={styles.cardValue}>{fmt(stats.totalSpent)}</Text>
-              <Text style={styles.cardSub}>{stats.expenseCount} {stats.expenseCount === 1 ? "expense" : "expenses"}</Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>REMAINING</Text>
-              <Text style={[styles.cardValue, { color: stats.remaining >= 0 ? COLORS.success : COLORS.error }]}>
-                {fmt(stats.remaining)}
-              </Text>
-              <Text style={styles.cardSub}>
-                {stats.totalBudgeted === 0 ? "no budget set" : stats.remaining >= 0 ? "under budget" : "over budget"}
-              </Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <Text style={styles.cardLabel}>OVERALL USAGE</Text>
-              <Text style={[styles.cardValue, { color: stats.usage > 90 ? COLORS.error : COLORS.success }]}>
-                {stats.usage.toFixed(0)}%
-              </Text>
-              <View style={styles.usageBarTrack}>
-                <View style={[styles.usageBarFill, { width: `${stats.usage}%`, backgroundColor: stats.usage > 90 ? COLORS.error : COLORS.success }]} />
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* ── Empty state ── */}
-        {!loading && trips.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>✈️</Text>
-            <Text style={styles.emptyTitle}>No trips yet</Text>
-            <Text style={styles.emptySub}>Add a trip to start tracking your budget</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => navigation.navigate(SCREENS.TRIPS)}>
-              <Text style={styles.emptyBtnText}>Go to Trips</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── Trip cards — tap to open detail modal ── */}
-        {!loading && displayedTrips.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Trips</Text>
-            {displayedTrips.map((trip) => {
-              const budgeted = getTripBudget(trip) ?? 0;
-              const spent = spentByTrip[trip.id] ?? 0;
-              const remaining = budgeted - spent;
-              const pct = budgeted > 0 ? Math.min((spent / budgeted) * 100, 100) : 0;
-              const expCount = expenseCountByTrip[trip.id] ?? 0;
-
-              return (
-                <TouchableOpacity
-                  key={trip.id}
-                  style={styles.tripCard}
-                  onPress={() => setBudgetModalTrip(trip)}
-                  activeOpacity={0.75}
-                >
-                  {/* Top row */}
-                  <View style={styles.tripTopRow}>
-                    <View style={styles.tripInfo}>
-                      <Text style={styles.tripName}>{trip.name}</Text>
-                      <Text style={styles.tripMeta}>
-                        {[trip.city, trip.country].filter(Boolean).join(", ")}
-                        {trip.startDate ? `  ·  ${fmtDate(trip.startDate)} – ${fmtDate(trip.endDate)}` : ""}
-                      </Text>
-                    </View>
-                    <Text style={styles.tripChevron}>›</Text>
-                  </View>
-
-                  {/* Progress bar */}
-                  <ProgressBar pct={pct} />
-
-                  {/* Stats row */}
-                  <View style={styles.statsRow}>
-                    <Text style={styles.statText}>
-                      {fmt(spent)}{budgeted > 0 ? ` of ${fmt(budgeted)}` : " (no budget set)"}
-                    </Text>
-                    {budgeted > 0 && <Text style={styles.statText}>{pct.toFixed(0)}% used</Text>}
-                    {budgeted > 0 && (
-                      <Text style={[styles.statTextBold, { color: remaining >= 0 ? COLORS.success : COLORS.error }]}>
-                        {fmt(remaining)} {remaining >= 0 ? "left" : "over"}
-                      </Text>
-                    )}
-                  </View>
-
-                  {/* Expense count hint */}
-                  <Text style={styles.expHint}>
-                    {expCount > 0
-                      ? `${expCount} expense${expCount === 1 ? "" : "s"} logged · tap to manage`
-                      : "Tap to view details & add expenses"}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Trip picker modal */}
-        <TripPickerModal
-          visible={pickerVisible}
-          trips={trips}
-          selectedId={selectedTripId}
-          onSelect={setSelectedTripId}
-          onClose={() => setPickerVisible(false)}
-        />
-      </ScrollView>
+        initialNumToRender={10}
+        windowSize={5}
+        maxToRenderPerBatch={5}
+        removeClippedSubviews
+      />
     </>
   );
 }

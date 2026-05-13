@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   Dimensions,
   PanResponder,
+  InteractionManager,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 import { dateRangeOf } from "../lib/utils";
@@ -19,7 +20,7 @@ const { width } = Dimensions.get("window");
 const cardWidth = width - SPACING.md * 2;
 const containerHeight = cardWidth / (16 / 9);
 
-export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
+function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
   const navigation = useNavigation();
   const [cover, setCover] = useState(null);
   const [allMedia, setAllMedia] = useState([]);
@@ -48,26 +49,34 @@ export default function TripCard({ trip, onMenu, onEdit, onDelete, onShare }) {
     localFocusRef.current = cf;
   }, [trip.coverFocus?.x, trip.coverFocus?.y]);
 
-  // Fetch all media for this trip
+  // Fetch media for this trip once, deferred until after the navigation animation
+  // settles. Using getDocs (not onSnapshot) so each card doesn't hold a persistent
+  // Firestore listener — N cards × onSnapshot was flooding the JS thread on mount.
   useEffect(() => {
     if (!trip.id) return;
 
-    const q = query(
-      collection(db, "trips", trip.id, "media"),
-      orderBy("createdAt", "desc")
-    );
+    let cancelled = false;
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const arr = [];
-        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-        setAllMedia(arr);
-      },
-      () => setAllMedia([])
-    );
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      const q = query(
+        collection(db, "trips", trip.id, "media"),
+        orderBy("createdAt", "desc")
+      );
+      getDocs(q)
+        .then((snap) => {
+          if (cancelled) return;
+          const arr = [];
+          snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+          setAllMedia(arr);
+        })
+        .catch(() => {});
+    });
 
-    return () => unsub();
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
   }, [trip.id]);
 
   // Set current cover based on index
@@ -507,3 +516,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+export default React.memo(TripCard, (prev, next) =>
+  prev.trip.id === next.trip.id &&
+  prev.trip.updatedAt === next.trip.updatedAt &&
+  prev.trip.coverMediaId === next.trip.coverMediaId &&
+  prev.trip.coverFocus?.x === next.trip.coverFocus?.x &&
+  prev.trip.coverFocus?.y === next.trip.coverFocus?.y
+);

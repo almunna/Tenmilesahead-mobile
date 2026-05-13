@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  InteractionManager,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   collection,
   doc,
@@ -217,10 +219,19 @@ export default function BadgesScreen({ route }) {
   const [summary, setSummary]   = useState({ earned: 0, total: 0 });
   const [tieredData, setTiered] = useState({ miles: 0, states: 0, countries: 0 });
 
-  useEffect(() => {
-    if (!user) return;
-    fetchAndEvaluate();
-  }, [user]);
+  // Re-evaluate every time the screen is focused so totalMiles saved by
+  // HomeScreen phase 2 is always reflected without requiring a sign-out/in.
+  // Deferred via InteractionManager so the tab-switch animation finishes
+  // before the heavy Firestore reads begin.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      const task = InteractionManager.runAfterInteractions(() => {
+        fetchAndEvaluate();
+      });
+      return () => task.cancel();
+    }, [user])
+  );
 
   async function fetchAndEvaluate() {
     setLoading(true);
@@ -274,8 +285,10 @@ export default function BadgesScreen({ route }) {
         }
       }
 
-      for (const trip of pastTrips) {
-        // Main trip location
+      // Run all per-trip subcollection reads in parallel — eliminates the
+      // sequential await chain that caused O(N) network latency on first load.
+      await Promise.all(pastTrips.map(async (trip) => {
+        // Main trip location (synchronous)
         if (trip.city && trip.country) {
           allLocations.push({
             city:    trip.city,
@@ -294,10 +307,16 @@ export default function BadgesScreen({ route }) {
           flightsByMonth[key] = (flightsByMonth[key] || 0) + 1;
         }
 
+        // Fire all three subcollection reads concurrently for this trip.
+        // Accommodations: skip the Firestore read if the trip-level field is set.
+        const needsAccomRead = !(trip.accommodationType && trip.accommodationType.trim() !== "");
+        const [destSnap, accomSnap, actSnap] = await Promise.all([
+          getDocs(collection(db, "trips", trip.id, "destinations")),
+          needsAccomRead ? getDocs(collection(db, "trips", trip.id, "accommodations")) : Promise.resolve(null),
+          getDocs(collection(db, "trips", trip.id, "activities")),
+        ]);
+
         // Destinations subcollection
-        const destSnap = await getDocs(
-          collection(db, "trips", trip.id, "destinations")
-        );
         destSnap.forEach((d) => {
           const dest = d.data();
           if (dest.city && dest.country) {
@@ -323,24 +342,15 @@ export default function BadgesScreen({ route }) {
           }
         });
 
-        // Accommodations: check trip-level accommodationType field (matches web)
-        // AND check accommodations subcollection
-        if (!hasAccommodation) {
-          if (trip.accommodationType && trip.accommodationType.trim() !== "") {
-            hasAccommodation = true;
-          } else {
-            const accomSnap = await getDocs(
-              collection(db, "trips", trip.id, "accommodations")
-            );
-            if (!accomSnap.empty) hasAccommodation = true;
-          }
+        // Accommodations: check trip-level field (matches web) AND subcollection
+        if (trip.accommodationType && trip.accommodationType.trim() !== "") {
+          hasAccommodation = true;
+        } else if (accomSnap && !accomSnap.empty) {
+          hasAccommodation = true;
         }
 
         // Activities subcollection – add to allLocations for badge detection
         // (matches web behavior: activities checked for UNESCO, wonders, etc.)
-        const actSnap = await getDocs(
-          collection(db, "trips", trip.id, "activities")
-        );
         actSnap.forEach((d) => {
           const act = d.data();
           if (act.city || act.name) {
@@ -352,7 +362,7 @@ export default function BadgesScreen({ route }) {
             });
           }
         });
-      }
+      }));
 
       // ── 3. Resolve stats ──────────────────────────────────────────────
       // Priority:

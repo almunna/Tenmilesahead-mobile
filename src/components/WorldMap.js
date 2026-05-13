@@ -15,6 +15,7 @@ import { getCoordinates } from "../lib/geocoding";
 
 export default function WorldMap({ trips, user }) {
   const [pins, setPins] = useState([]);
+  const [destinations, setDestinations] = useState([]);
   const [geocoding, setGeocoding] = useState(false);
   const [selectedPin, setSelectedPin] = useState(null);
 
@@ -26,7 +27,7 @@ export default function WorldMap({ trips, user }) {
   const prevTripIds = useRef("");
 
   // Static HTML — rendered once on mount, never reloads
-  const webViewSource = useMemo(() => ({ html: generateMapHTML() }), []);
+  const webViewSource = useMemo(() => ({ html: generateMapHTML(process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY) }), []);
 
   useEffect(() => {
     if (!user || !trips || trips.length === 0) return;
@@ -39,6 +40,7 @@ export default function WorldMap({ trips, user }) {
     pinQueue.current = [];
     countryQueue.current = null;
     setPins([]);
+    setDestinations([]);
     setGeocoding(false);
 
     // Clear previous pins + shading if WebView already loaded
@@ -53,44 +55,9 @@ export default function WorldMap({ trips, user }) {
 
   function doInjectPins(pins) {
     if (!webViewRef.current || pins.length === 0) return;
-    const pinsJson = JSON.stringify(pins);
-    const js = `
-      (function() {
-        try {
-          if (typeof map === 'undefined' || typeof L === 'undefined') return;
-          var pins = ${pinsJson};
-          var iconCfg = {
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
-          };
-          if (!window._allBounds) window._allBounds = [];
-          if (!window._markers) window._markers = [];
-          pins.forEach(function(pin) {
-            var marker = L.marker([pin.latitude, pin.longitude], { icon: L.icon(iconCfg) }).addTo(map);
-            var locationParts = [pin.city, pin.state, pin.country].filter(Boolean);
-            var locationStr = locationParts.join(', ');
-            marker.bindPopup(
-              '<div class="popup-title">' + (pin.name || locationStr) + '</div>' +
-              '<div class="popup-location">' + locationStr + '</div>' +
-              '<div class="popup-trip">Part of: ' + pin.tripName + '</div>'
-            );
-            window._markers.push(marker);
-            window._allBounds.push([pin.latitude, pin.longitude]);
-          });
-          if (window._allBounds.length === 1) {
-            map.setView([window._allBounds[0][0], window._allBounds[0][1]], 4);
-          } else if (window._allBounds.length > 1) {
-            map.fitBounds(window._allBounds, { padding: [30, 30] });
-          }
-        } catch(e) {}
-      })();
-      true;
-    `;
-    webViewRef.current.injectJavaScript(js);
+    webViewRef.current.injectJavaScript(
+      `window.addPins && window.addPins(${JSON.stringify(pins)}); true;`
+    );
   }
 
   function injectPins(pins) {
@@ -162,6 +129,19 @@ export default function WorldMap({ trips, user }) {
 
       if (allDestsRaw.length === 0) return;
 
+      // Show destination text immediately — no geocoding needed for the list
+      setDestinations(
+        allDestsRaw
+          .filter((item) => item.data.country)
+          .map(({ doc, data, tripId, tripName }) => ({
+            id: `${tripId}_${doc.id}`,
+            city: data.city || "",
+            state: data.state || "",
+            country: data.country || "",
+            tripName,
+          }))
+      );
+
       // Inject country shading as soon as country list is known
       for (const { data } of allDestsRaw) {
         if (data.country) countries.add(data.country.toLowerCase().trim());
@@ -169,18 +149,8 @@ export default function WorldMap({ trips, user }) {
       injectCountryShading(Array.from(countries));
       setGeocoding(true);
 
-      // Deduplicate, then geocode all in parallel
-      const uniqueDests = [];
-      for (const item of allDestsRaw) {
-        if (!item.data.country) continue;
-        const locationKey = `${item.data.city}_${item.data.state}_${item.data.country}`;
-        if (seenLocations.has(locationKey)) continue;
-        seenLocations.add(locationKey);
-        uniqueDests.push(item);
-      }
-
       const geocodeResults = await Promise.allSettled(
-        uniqueDests.map(async ({ doc, data, tripId, tripName }) => {
+        allDestsRaw.filter((item) => item.data.country).map(async ({ doc, data, tripId, tripName }) => {
           const coords = await getCoordinates(
             data.specificAddress,
             data.city,
@@ -251,40 +221,36 @@ export default function WorldMap({ trips, user }) {
 
       <View style={styles.pinListContainer}>
         <Text style={styles.pinListTitle}>
-          Destinations {geocoding ? "" : `(${pins.length} pins)`}
+          Destinations ({destinations.length} pins)
         </Text>
-        {geocoding ? (
-          <View style={styles.pinListLoading}>
-            <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.pinListLoadingText}>Loading pins...</Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={styles.pinList}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={true}
-          >
-            {pins.map((pin) => (
-              <TouchableOpacity
-                key={pin.id}
-                style={[
-                  styles.pinItem,
-                  selectedPin?.id === pin.id && styles.pinItemSelected,
-                ]}
-                onPress={() => setSelectedPin(pin)}
-              >
-                <Text style={styles.pinIcon}>📍</Text>
-                <View style={styles.pinInfo}>
-                  <Text style={styles.pinCity}>{pin.city || pin.country}</Text>
-                  {pin.state ? (
-                    <Text style={styles.pinState}>{pin.state}</Text>
-                  ) : null}
-                  <Text style={styles.pinTrip}>{pin.tripName}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
+        <ScrollView
+          style={styles.pinList}
+          nestedScrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+        >
+          {destinations.map((dest) => (
+            <TouchableOpacity
+              key={dest.id}
+              style={[
+                styles.pinItem,
+                selectedPin?.id === dest.id && styles.pinItemSelected,
+              ]}
+              onPress={() => {
+                const pin = pins.find((p) => p.id === dest.id);
+                if (pin) setSelectedPin(pin);
+              }}
+            >
+              <Text style={styles.pinIcon}>📍</Text>
+              <View style={styles.pinInfo}>
+                <Text style={styles.pinCity}>{dest.city || dest.country}</Text>
+                {dest.state ? (
+                  <Text style={styles.pinState}>{dest.state}</Text>
+                ) : null}
+                <Text style={styles.pinTrip}>{dest.tripName}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
@@ -293,60 +259,32 @@ export default function WorldMap({ trips, user }) {
 // ─── Static map HTML ─────────────────────────────────────────────────────────
 // Rendered once. Country shading and pins are injected via JS after data loads.
 
-function generateMapHTML() {
+function generateMapHTML(apiKey) {
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-    html, body { height: 100%; width: 100%; overflow: hidden; background: #fff; position: fixed; touch-action: none; }
-    #map { height: 100%; width: 100%; background: #aad3df; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-    .leaflet-container { background: #aad3df !important; touch-action: pan-x pan-y; }
-    .leaflet-tile { opacity: 1 !important; }
-    .leaflet-control-attribution { display: none !important; }
-    .leaflet-popup-content-wrapper { background: #2c3e50; color: white; border-radius: 8px; }
-    .leaflet-popup-content { margin: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .popup-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    .popup-location { font-size: 12px; opacity: 0.9; margin-bottom: 2px; }
-    .popup-trip { font-size: 11px; opacity: 0.7; }
-    .leaflet-popup-tip { background: #2c3e50; }
+    html, body { height: 100%; width: 100%; overflow: hidden; background: #e8eaed; position: fixed; touch-action: none; }
+    #map { height: 100%; width: 100%; position: absolute; top: 0; left: 0; }
+    .info-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #1a1a1a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .info-location { font-size: 12px; color: #555; margin-bottom: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .info-trip { font-size: 11px; color: #888; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <script>
-    const map = L.map('map', {
-      zoomControl: true,
-      attributionControl: false,
-      preferCanvas: false,
-      fadeAnimation: true,
-      zoomAnimation: true,
-      minZoom: 2,
-      worldCopyJump: true,
-      maxBounds: [[-85, -Infinity], [85, Infinity]],
-      maxBoundsViscosity: 1.0
-    }).setView([20, 0], 2);
+    var map;
+    var _markers = [];
+    var _allPositions = [];
+    var _cachedGeoJSON = null;
+    var _pendingPins = null;
+    var _pendingCountries = null;
 
-    L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=en', {
-      attribution: '',
-      maxZoom: 20,
-      minZoom: 2,
-      keepBuffer: 4,
-      updateWhenIdle: false,
-      updateWhenZooming: false,
-      crossOrigin: true
-    }).addTo(map);
-
-    setTimeout(function() { map.invalidateSize(); }, 200);
-
-    // Called from React Native with visited country list
-    window.applyCountryShading = function(visitedCountries) {
-      if (!visitedCountries || visitedCountries.length === 0) return;
-      var countryNameMap = {
+    var countryNameMap = {
         'united states': ['united states of america', 'usa', 'us', 'united states'],
         'usa': ['united states of america'],
         'united states (usvi)': ['united states of america'],
@@ -578,7 +516,53 @@ function generateMapHTML() {
         'saint barthélemy (france)': ['france', 'saint barthelemy'],
         'saint barthelemy': ['france'],
         'antarctica': ['antarctica']
-      };
+    };
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 20, lng: 0 },
+        zoom: 2,
+        minZoom: 2,
+        mapTypeId: 'roadmap',
+        gestureHandling: 'greedy',
+        zoomControl: true,
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+          style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+          position: google.maps.ControlPosition.BOTTOM_LEFT,
+        },
+        streetViewControl: false,
+        fullscreenControl: false,
+        restriction: {
+          latLngBounds: { north: 85, south: -85, west: -180, east: 180 },
+          strictBounds: true,
+        },
+      });
+      if (_pendingCountries !== null) {
+        window.applyCountryShading(_pendingCountries);
+        _pendingCountries = null;
+      }
+      if (_pendingPins !== null) {
+        window.addPins(_pendingPins);
+        _pendingPins = null;
+      }
+    }
+
+    window.clearMap = function() {
+      _markers.forEach(function(m) { m.setMap(null); });
+      _markers = [];
+      _allPositions = [];
+      if (map) {
+        map.data.forEach(function(f) { map.data.remove(f); });
+        map.setCenter({ lat: 20, lng: 0 });
+        map.setZoom(2);
+      }
+    };
+
+    window.applyCountryShading = function(visitedCountries) {
+      if (!map) { _pendingCountries = visitedCountries; return; }
+      map.data.forEach(function(f) { map.data.remove(f); });
+      if (!visitedCountries || visitedCountries.length === 0) return;
 
       var countriesToShade = {};
       visitedCountries.forEach(function(visited) {
@@ -598,33 +582,55 @@ function generateMapHTML() {
           }
           return false;
         });
-        if (window._shadingLayer) window._shadingLayer.remove();
-        window._shadingLayer = L.geoJSON({ type: 'FeatureCollection', features: visitedFeatures }, {
-          style: { fillColor: '#FFC0CB', fillOpacity: 0.4, color: '#FF69B4', weight: 1, opacity: 0.6 }
-        }).addTo(map);
+        if (visitedFeatures.length === 0) return;
+        map.data.addGeoJson({ type: 'FeatureCollection', features: visitedFeatures });
+        map.data.setStyle({ fillColor: '#FFC0CB', fillOpacity: 0.4, strokeColor: '#FF69B4', strokeWeight: 1, strokeOpacity: 0.6, clickable: false });
       }
 
-      if (window._cachedGeoJSON) {
-        applyShading(window._cachedGeoJSON);
+      if (_cachedGeoJSON) {
+        applyShading(_cachedGeoJSON);
       } else {
         fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson')
           .then(function(r) { return r.json(); })
-          .then(function(geoJSON) {
-            window._cachedGeoJSON = geoJSON;
-            applyShading(geoJSON);
-          })
+          .then(function(geoJSON) { _cachedGeoJSON = geoJSON; applyShading(geoJSON); })
           .catch(function() {});
       }
     };
 
-    // Called from React Native when trips change — resets map state
-    window.clearMap = function() {
-      if (window._markers) { window._markers.forEach(function(m) { m.remove(); }); window._markers = []; }
-      if (window._shadingLayer) { window._shadingLayer.remove(); window._shadingLayer = null; }
-      window._allBounds = [];
-      map.setView([20, 0], 2);
+    window.addPins = function(pins) {
+      if (!map) { _pendingPins = pins; return; }
+      if (!pins || pins.length === 0) return;
+      pins.forEach(function(pin) {
+        var marker = new google.maps.Marker({
+          position: { lat: pin.latitude, lng: pin.longitude },
+          map: map,
+          icon: {
+            url: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            scaledSize: new google.maps.Size(25, 41),
+            anchor: new google.maps.Point(12, 41)
+          }
+        });
+        var locationParts = [pin.city, pin.state, pin.country].filter(Boolean);
+        var locationStr = locationParts.join(', ');
+        var content = '<div><div class="info-title">' + (pin.name || locationStr) + '</div>' +
+          '<div class="info-location">' + locationStr + '</div>' +
+          '<div class="info-trip">Part of: ' + pin.tripName + '</div></div>';
+        var infoWindow = new google.maps.InfoWindow({ content: content });
+        marker.addListener('click', function() { infoWindow.open({ map: map, anchor: marker }); });
+        _markers.push(marker);
+        _allPositions.push({ lat: pin.latitude, lng: pin.longitude });
+      });
+      if (_allPositions.length === 1) {
+        map.setCenter(_allPositions[0]);
+        map.setZoom(4);
+      } else if (_allPositions.length > 1) {
+        var bounds = new google.maps.LatLngBounds();
+        _allPositions.forEach(function(pos) { bounds.extend(pos); });
+        map.fitBounds(bounds, 30);
+      }
     };
   </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap" async defer></script>
 </body>
 </html>
   `;
@@ -682,16 +688,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: scaleSpacing(SPACING.sm),
     maxHeight: 250,
-  },
-  pinListLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: scaleSpacing(SPACING.sm),
-    gap: 8,
-  },
-  pinListLoadingText: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: scaleFontSize(12),
   },
   pinListTitle: {
     fontSize: scaleFontSize(14),

@@ -154,7 +154,14 @@ const TOOLS_ITEMS = [
 
 /* ── Bottom-sheet dropdown shown when Book / Tools tab is tapped ── */
 function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, androidTop, onEsimOpen, disclaimer }) {
-  if (!visible) return null;
+  // Keep the sheet mounted during the exit animation so it can animate out smoothly
+  // instead of vanishing instantly when visible flips to false.
+  const [mounted, setMounted] = useState(visible);
+  useEffect(() => { if (visible) setMounted(true); }, [visible]);
+
+  if (!mounted) return null;
+
+  const onExited = () => setMounted(false);
 
   const handleItem = (item) => {
     onClose();
@@ -187,16 +194,22 @@ function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, and
     </View>
   );
 
-  /* Android: render inline (no Modal) so coordinates match the onLayout root View */
+  /* Android: render inline (no Modal) */
   if (Platform.OS === 'android') {
     return (
       <>
-        <TouchableOpacity
-          style={sheetStyles.androidBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-        <AnimatedSheet style={[sheetStyles.sheet, { position: 'absolute', top: androidTop, bottom: undefined, right: scaleSpacing(12), zIndex: 100 }]}>
+        {visible && (
+          <TouchableOpacity
+            style={sheetStyles.androidBackdrop}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+        )}
+        <AnimatedSheet
+          visible={visible}
+          onExited={onExited}
+          style={[sheetStyles.sheet, { position: 'absolute', top: androidTop, bottom: undefined, right: scaleSpacing(12), zIndex: 100 }]}
+        >
           {sheetContent}
           {items.map((item) => (
             <TouchableOpacity key={item.label} style={sheetStyles.item} onPress={() => handleItem(item)} activeOpacity={0.7}>
@@ -204,20 +217,18 @@ function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, and
               <Text style={sheetStyles.itemArrow}>{item.url ? "↗" : "›"}</Text>
             </TouchableOpacity>
           ))}
-          {disclaimer && (
-            <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>
-          )}
+          {disclaimer && <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>}
         </AnimatedSheet>
       </>
     );
   }
 
-  /* iOS: use Modal */
+  /* iOS: use Modal — visible={mounted} keeps it open during the exit animation */
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
       <View style={sheetStyles.overlay}>
         <TouchableOpacity style={sheetStyles.backdrop} activeOpacity={1} onPress={onClose} />
-        <AnimatedSheet style={sheetStyles.sheet}>
+        <AnimatedSheet visible={visible} onExited={onExited} style={sheetStyles.sheet}>
           {sheetContent}
           {items.map((item) => (
             <TouchableOpacity key={item.label} style={sheetStyles.item} onPress={() => handleItem(item)} activeOpacity={0.7}>
@@ -225,9 +236,7 @@ function TabDropdownSheet({ visible, title, items, onClose, isAuthenticated, and
               <Text style={sheetStyles.itemArrow}>{item.url ? "↗" : "›"}</Text>
             </TouchableOpacity>
           ))}
-          {disclaimer && (
-            <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>
-          )}
+          {disclaimer && <Text style={sheetStyles.disclaimer}>{disclaimer}</Text>}
         </AnimatedSheet>
       </View>
     </Modal>
@@ -254,8 +263,8 @@ function AnimatedTabItem({ children, onPress, style }) {
   ]).start();
 
   const pressOut = () => Animated.parallel([
-    Animated.spring(scale,     { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 12 }),
-    Animated.timing(highlight, { toValue: 0, useNativeDriver: true, duration: 280 }),
+    Animated.spring(scale,     { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 8 }),
+    Animated.timing(highlight, { toValue: 0, useNativeDriver: true, duration: 100 }),
   ]).start();
 
   return (
@@ -272,7 +281,7 @@ function AnimatedTabItem({ children, onPress, style }) {
 function AnimatedTabButton({ children, style, onPress }) {
   const scale = useRef(new Animated.Value(1)).current;
   const pressIn  = () => Animated.spring(scale, { toValue: 0.85, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 18, bounciness: 12 }).start();
+  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 8 }).start();
   return (
     <Pressable style={style} onPress={onPress} onPressIn={pressIn} onPressOut={pressOut}>
       <Animated.View style={{ transform: [{ scale }], flex: 1 }}>{children}</Animated.View>
@@ -280,16 +289,25 @@ function AnimatedTabButton({ children, style, onPress }) {
   );
 }
 
-/* ── Animated dropdown panel (slide-down + fade) ── */
-function AnimatedSheet({ style, children }) {
+/* ── Animated dropdown panel (slide-down + fade, with exit animation) ── */
+function AnimatedSheet({ style, children, visible, onExited }) {
   const slideY  = useRef(new Animated.Value(-10)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(slideY,  { toValue: 0, useNativeDriver: true, speed: 22, bounciness: 6 }),
-      Animated.timing(opacity, { toValue: 1, useNativeDriver: true, duration: 180 }),
-    ]).start();
-  }, []);
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(slideY,  { toValue: 0, useNativeDriver: true, speed: 60, bounciness: 0 }),
+        Animated.timing(opacity, { toValue: 1, useNativeDriver: true, duration: 120 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideY,  { toValue: -8, useNativeDriver: true, duration: 150 }),
+        Animated.timing(opacity, { toValue: 0,  useNativeDriver: true, duration: 150 }),
+      ]).start(({ finished }) => { if (finished) onExited?.(); });
+    }
+  }, [visible]);
+
   return (
     <Animated.View style={[style, { transform: [{ translateY: slideY }], opacity }]}>
       {children}
@@ -409,6 +427,7 @@ function AuthenticatedTabs() {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [androidNavHeight, setAndroidNavHeight] = useState(80);
   const [esimOpen, setEsimOpen] = useState(false);
+  const lastPressRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -418,13 +437,21 @@ function AuthenticatedTabs() {
     });
   }, []);
 
+  const handleTabPress = (index, action) => {
+    const now = Date.now();
+    if (now - lastPressRef.current < 100) return;
+    lastPressRef.current = now;
+    setActiveTabIndex(index);
+    action();
+  };
+
   const androidTabs = [
-    { name: SCREENS.HOME,           icon: (f) => <LogoTabIcon focused={f} />,                        onPress: () => navigationRef.navigate(SCREENS.HOME) },
-    { name: SCREENS.TRIPS,          icon: (f) => <TabIcon icon="✈️" label="Trips" focused={f} />,    onPress: () => navigationRef.navigate(SCREENS.TRIPS) },
-    { name: 'Achievements',         icon: (f) => <TabIcon icon="🎫" label="Book" focused={f} />,     onPress: () => setActiveDropdown('book') },
-    { name: SCREENS.GLOBAL_REVIEWS, icon: (f) => <TabIcon icon="⭐" label="Reviews" focused={f} />,  onPress: () => navigationRef.navigate(SCREENS.GLOBAL_REVIEWS) },
-    { name: 'TravelTools',          icon: (f) => <TabIcon icon="🧳" label="Tools" focused={f} />,    onPress: () => setActiveDropdown('tools') },
-    { name: 'More',                 icon: (f) => <TabIcon icon="☰" label="More" focused={f} />,      onPress: () => setDrawerVisible(true) },
+    { name: SCREENS.HOME,           icon: (f) => <LogoTabIcon focused={f} />,                        onPress: () => handleTabPress(0, () => navigationRef.navigate(SCREENS.HOME)) },
+    { name: SCREENS.TRIPS,          icon: (f) => <TabIcon icon="✈️" label="Trips" focused={f} />,    onPress: () => handleTabPress(1, () => navigationRef.navigate(SCREENS.TRIPS)) },
+    { name: 'Achievements',         icon: (f) => <TabIcon icon="🎫" label="Book" focused={f} />,     onPress: () => handleTabPress(2, () => setActiveDropdown('book')) },
+    { name: SCREENS.GLOBAL_REVIEWS, icon: (f) => <TabIcon icon="⭐" label="Reviews" focused={f} />,  onPress: () => handleTabPress(3, () => navigationRef.navigate(SCREENS.GLOBAL_REVIEWS)) },
+    { name: 'TravelTools',          icon: (f) => <TabIcon icon="🧳" label="Tools" focused={f} />,    onPress: () => handleTabPress(4, () => setActiveDropdown('tools')) },
+    { name: 'More',                 icon: (f) => <TabIcon icon="☰" label="More" focused={f} />,      onPress: () => handleTabPress(5, () => setDrawerVisible(true)) },
   ];
 
   return (
@@ -575,6 +602,7 @@ function UnauthenticatedTabs() {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [androidNavHeight, setAndroidNavHeight] = useState(80);
   const [esimOpen, setEsimOpen] = useState(false);
+  const lastPressRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -583,6 +611,14 @@ function UnauthenticatedTabs() {
       if (state?.index !== undefined) setActiveTabIndex(state.index);
     });
   }, []);
+
+  const handleTabPress = (index, action) => {
+    const now = Date.now();
+    if (now - lastPressRef.current < 100) return;
+    lastPressRef.current = now;
+    setActiveTabIndex(index);
+    action();
+  };
 
   const redirectToSignIn = ({ navigation }) => ({
     tabPress: (e) => {
@@ -594,12 +630,12 @@ function UnauthenticatedTabs() {
   const goToSignIn = () => navigationRef.navigate("Landing", { screen: SCREENS.SIGNIN });
 
   const androidTabs = [
-    { name: 'Landing',         icon: (f) => <LogoTabIcon focused={f} />,                        onPress: () => navigationRef.navigate('Landing', { screen: 'LandingMain' }) },
-    { name: 'TripsTab',        icon: (f) => <TabIcon icon="✈️" label="Trips" focused={f} />,    onPress: goToSignIn },
-    { name: 'AchievementsTab', icon: (f) => <TabIcon icon="🎫" label="Book" focused={f} />,     onPress: () => setActiveDropdown('book') },
-    { name: 'ReviewsTab',      icon: (f) => <TabIcon icon="⭐" label="Reviews" focused={f} />,  onPress: goToSignIn },
-    { name: 'ToolsTab',        icon: (f) => <TabIcon icon="🧳" label="Tools" focused={f} />,    onPress: () => setActiveDropdown('tools') },
-    { name: 'MoreTab',         icon: (f) => <TabIcon icon="☰" label="More" focused={f} />,      onPress: () => setDrawerVisible(true) },
+    { name: 'Landing',         icon: (f) => <LogoTabIcon focused={f} />,                        onPress: () => handleTabPress(0, () => navigationRef.navigate('Landing', { screen: 'LandingMain' })) },
+    { name: 'TripsTab',        icon: (f) => <TabIcon icon="✈️" label="Trips" focused={f} />,    onPress: () => handleTabPress(1, goToSignIn) },
+    { name: 'AchievementsTab', icon: (f) => <TabIcon icon="🎫" label="Book" focused={f} />,     onPress: () => handleTabPress(2, () => setActiveDropdown('book')) },
+    { name: 'ReviewsTab',      icon: (f) => <TabIcon icon="⭐" label="Reviews" focused={f} />,  onPress: () => handleTabPress(3, goToSignIn) },
+    { name: 'ToolsTab',        icon: (f) => <TabIcon icon="🧳" label="Tools" focused={f} />,    onPress: () => handleTabPress(4, () => setActiveDropdown('tools')) },
+    { name: 'MoreTab',         icon: (f) => <TabIcon icon="☰" label="More" focused={f} />,      onPress: () => handleTabPress(5, () => setDrawerVisible(true)) },
   ];
 
   return (

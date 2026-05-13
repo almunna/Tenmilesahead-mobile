@@ -12,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  InteractionManager,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import {
@@ -22,6 +23,9 @@ import {
   orderBy,
   query,
   deleteDoc,
+  getDocs,
+  limit,
+  startAfter,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { db } from "../lib/firebase";
@@ -283,6 +287,9 @@ export default function TripDetailScreen() {
 
   const [trip, setTrip] = useState(null);
   const [media, setMedia] = useState([]);
+  const [mediaLastDoc, setMediaLastDoc] = useState(null);
+  const [hasMoreMedia, setHasMoreMedia] = useState(false);
+  const [loadingMoreMedia, setLoadingMoreMedia] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -312,9 +319,30 @@ export default function TripDetailScreen() {
   // Cover image positioning
   const [coverPosY, setCoverPosY] = useState(50);
 
+  // Deferred loading: wait for navigation animation before hitting Firestore/WebView
+  const [dataReady, setDataReady] = useState(false);
+  const [mapVisible, setMapVisible] = useState(false);
+  const [visiblePhotoCount, setVisiblePhotoCount] = useState(12);
+  const [visibleItinCount, setVisibleItinCount] = useState(10);
+
+  // Defer all heavy work until the navigation slide-in animation is done
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setDataReady(true);
+    });
+    return () => task.cancel();
+  }, []);
+
+  // Show the map shortly after data is ready so the list renders first
+  useEffect(() => {
+    if (!dataReady) return;
+    const timer = setTimeout(() => setMapVisible(true), 400);
+    return () => clearTimeout(timer);
+  }, [dataReady]);
+
   // Listen to trip document
   useEffect(() => {
-    if (!tripId || !user) return;
+    if (!tripId || !user || !dataReady) return;
 
     const tripRef = doc(db, "trips", tripId);
     const unsubTrip = onSnapshot(
@@ -346,29 +374,55 @@ export default function TripDetailScreen() {
     );
 
     return () => unsubTrip();
-  }, [tripId, user]);
+  }, [tripId, user, dataReady]);
 
-  // Listen to media subcollection
+  // Load first page of media (50 at a time — avoids pulling 700+ docs into state)
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || !dataReady) return;
+    let cancelled = false;
 
-    const mediaQuery = query(
+    const q = query(
       collection(db, "trips", tripId, "media"),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
+      limit(50)
     );
 
-    const unsubMedia = onSnapshot(mediaQuery, (snap) => {
-      const arr = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-      setMedia(arr);
-    });
+    getDocs(q)
+      .then((snap) => {
+        if (cancelled) return;
+        const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setMedia(arr);
+        setMediaLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+        setHasMoreMedia(snap.docs.length === 50);
+      })
+      .catch(() => {});
 
-    return () => unsubMedia();
-  }, [tripId]);
+    return () => { cancelled = true; };
+  }, [tripId, dataReady]);
+
+  const loadMoreMedia = useCallback(async () => {
+    if (loadingMoreMedia || !hasMoreMedia || !mediaLastDoc) return;
+    setLoadingMoreMedia(true);
+    try {
+      const q = query(
+        collection(db, "trips", tripId, "media"),
+        orderBy("createdAt", "desc"),
+        limit(50),
+        startAfter(mediaLastDoc)
+      );
+      const snap = await getDocs(q);
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setMedia((prev) => [...prev, ...arr]);
+      setMediaLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMoreMedia(snap.docs.length === 50);
+    } catch { /* ignore */ } finally {
+      setLoadingMoreMedia(false);
+    }
+  }, [tripId, loadingMoreMedia, hasMoreMedia, mediaLastDoc]);
 
   // Listen to subcollections
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || !dataReady) return;
 
     const unsubDest = onSnapshot(
       query(
@@ -450,25 +504,30 @@ export default function TripDetailScreen() {
       unsubCruise();
       unsubExtras();
     };
-  }, [tripId]);
+  }, [tripId, dataReady]);
 
-  // Fetch weather for all itinerary items whenever data changes
+  const allWeatherItems = useMemo(() => [
+    ...(trip ? [{ id: "trip-primary", city: trip.city, country: trip.country, startDate: trip.startDate }] : []),
+    ...destinations.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
+    ...activities.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
+    ...accommodations.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
+    ...restaurants.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
+    ...cruises.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
+  ], [trip, destinations, activities, accommodations, restaurants, cruises]);
+
+  // Only fetch weather for visible itinerary items — prevents firing 50+ concurrent
+  // network requests when a trip has many destinations/activities
   useEffect(() => {
-    const allItems = [
-      ...(trip ? [{ id: "trip-primary", city: trip.city, country: trip.country, startDate: trip.startDate }] : []),
-      ...destinations.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
-      ...activities.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
-      ...accommodations.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
-      ...restaurants.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
-      ...cruises.map((d) => ({ id: d.id, city: d.city, country: d.country, startDate: d.startDate })),
-    ];
-    allItems.forEach((item) => {
-      const location = item.city || item.country;
-      const date = toYMD(item.startDate);
-      if (location && date) fetchWeatherForItem(item.id, location, date);
-    });
+    const visibleIds = new Set(itinerary.slice(0, visibleItinCount).map((i) => i.id));
+    allWeatherItems
+      .filter((item) => visibleIds.has(item.id))
+      .forEach((item) => {
+        const location = item.city || item.country;
+        const date = toYMD(item.startDate);
+        if (location && date) fetchWeatherForItem(item.id, location, date);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip, destinations, activities, accommodations, restaurants, cruises]);
+  }, [allWeatherItems, visibleItinCount]);
 
   const coverMedia = useMemo(
     () => (trip ? media.find((m) => m.id === trip.coverMediaId) : null),
@@ -599,6 +658,19 @@ export default function TripDetailScreen() {
     Linking.openURL(url.startsWith("http") ? url : `https://${url}`);
   }, []);
 
+  // Infinite scroll: auto-load more photos as user scrolls near the bottom of the page
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    if (distanceFromBottom > 400) return;
+
+    if (visiblePhotoCount < sortedMedia.length) {
+      setVisiblePhotoCount((c) => Math.min(c + 12, sortedMedia.length));
+    } else if (hasMoreMedia && !loadingMoreMedia) {
+      loadMoreMedia();
+    }
+  }, [visiblePhotoCount, sortedMedia.length, hasMoreMedia, loadingMoreMedia, loadMoreMedia]);
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -627,7 +699,12 @@ export default function TripDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        removeClippedSubviews={true}
+        onScroll={handleScroll}
+        scrollEventThrottle={200}
+      >
         {/* Cover Image */}
         <View style={styles.coverContainer}>
           {coverMedia?.type === "image" ? (
@@ -685,12 +762,20 @@ export default function TripDetailScreen() {
 
         {/* b. Trip Map */}
         <View style={styles.section}>
-          <TripDetailMap
-            trip={trip}
-            destinations={destinations}
-            activities={activities}
-            restaurants={restaurants}
-          />
+          <Text style={styles.sectionTitle}>Trip Map</Text>
+          {mapVisible ? (
+            <TripDetailMap
+              trip={trip}
+              destinations={destinations}
+              activities={activities}
+              restaurants={restaurants}
+            />
+          ) : (
+            <View style={styles.mapPlaceholder}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.mapPlaceholderText}>Loading map…</Text>
+            </View>
+          )}
         </View>
 
         {/* Description (below map) */}
@@ -703,24 +788,38 @@ export default function TripDetailScreen() {
 
         {/* c. Itinerary */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Itinerary</Text>
+          <Text style={styles.sectionTitle}>
+            Itinerary{itinerary.length > 0 ? ` (${itinerary.length})` : ""}
+          </Text>
           {itinerary.length === 0 ? (
             <Text style={styles.emptyText}>No itinerary entries yet</Text>
           ) : (
-            itinerary.map((item, index) => (
-              <ItineraryCard
-                key={`${item.type}-${item.id}`}
-                item={item}
-                itemWeather={weather[item.id]}
-                isFirst={index === 0}
-                onCall={handleItinCall}
-                onDirections={handleItinDirections}
-                onWebsite={handleItinWebsite}
-                onPhotos={setItinFlipbook}
-                onSearch={setBookingDest}
-                onWeather={setWeatherDest}
-              />
-            ))
+            <>
+              {itinerary.slice(0, visibleItinCount).map((item, index) => (
+                <ItineraryCard
+                  key={`${item.type}-${item.id}`}
+                  item={item}
+                  itemWeather={weather[item.id]}
+                  isFirst={index === 0}
+                  onCall={handleItinCall}
+                  onDirections={handleItinDirections}
+                  onWebsite={handleItinWebsite}
+                  onPhotos={setItinFlipbook}
+                  onSearch={setBookingDest}
+                  onWeather={setWeatherDest}
+                />
+              ))}
+              {visibleItinCount < itinerary.length && (
+                <TouchableOpacity
+                  style={styles.loadMoreButton}
+                  onPress={() => setVisibleItinCount((c) => c + 10)}
+                >
+                  <Text style={styles.loadMoreText}>
+                    Show more ({itinerary.length - visibleItinCount} remaining)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
@@ -744,9 +843,11 @@ export default function TripDetailScreen() {
 
         {/* h. Photos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photos</Text>
+          <Text style={styles.sectionTitle}>
+            Photos{sortedMedia.length > 0 ? ` (${sortedMedia.length})` : ""}
+          </Text>
           <View style={styles.photosGrid}>
-            {sortedMedia.map((m, index) => (
+            {sortedMedia.slice(0, visiblePhotoCount).map((m, index) => (
               <View key={m.id} style={styles.photoCard}>
                 <TouchableOpacity
                   onPress={() => {
@@ -801,6 +902,13 @@ export default function TripDetailScreen() {
           </View>
           {sortedMedia.length === 0 && (
             <Text style={styles.emptyText}>No photos yet</Text>
+          )}
+          {(visiblePhotoCount < sortedMedia.length || hasMoreMedia) && (
+            <ActivityIndicator
+              size="small"
+              color={COLORS.primary}
+              style={{ marginTop: SPACING.sm }}
+            />
           )}
         </View>
       </ScrollView>
@@ -1717,5 +1825,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.primary,
     fontWeight: "500",
+  },
+  mapPlaceholder: {
+    height: 220,
+    borderRadius: 12,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  mapPlaceholderText: {
+    fontSize: 13,
+    color: COLORS.muted,
+  },
+  loadMoreButton: {
+    marginTop: SPACING.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  loadMoreText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

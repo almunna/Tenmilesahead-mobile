@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -121,11 +121,14 @@ function GlobalReviewsInner({ navigation }) {
   const loadingMoreRef = useRef(false);
   const streamingReviewsRef = useRef(false);
 
-  useEffect(() => { tripDocsRef.current = tripDocs; }, [tripDocs]);
-  useEffect(() => { loadedTripCountRef.current = loadedTripCount; }, [loadedTripCount]);
-  useEffect(() => { allReviewsRef.current = allReviews; }, [allReviews]);
-  useEffect(() => { loadingMoreRef.current = loadingMore; }, [loadingMore]);
-  useEffect(() => { streamingReviewsRef.current = streamingReviews; }, [streamingReviews]);
+  // Keep all scroll-handler refs in sync in a single effect — one batch instead of 5.
+  useEffect(() => {
+    tripDocsRef.current = tripDocs;
+    loadedTripCountRef.current = loadedTripCount;
+    allReviewsRef.current = allReviews;
+    loadingMoreRef.current = loadingMore;
+    streamingReviewsRef.current = streamingReviews;
+  }, [tripDocs, loadedTripCount, allReviews, loadingMore, streamingReviews]);
 
   useEffect(() => {
     loadTrips();
@@ -453,25 +456,29 @@ function GlobalReviewsInner({ navigation }) {
 
   const uniqueLocations = ["All Locations", ...allCities];
 
-  const filteredReviews = allReviews.filter((review) => {
-    const matchesType =
-      selectedType === "All Types" || review.type === selectedType;
-    const matchesLocation =
-      selectedLocation === "All Locations" ||
-      normalizeCityKey(review.city || "") === normalizeCityKey(selectedLocation);
-    return matchesType && matchesLocation;
-  });
+  const filteredReviews = useMemo(() =>
+    allReviews.filter((review) => {
+      const matchesType =
+        selectedType === "All Types" || review.type === selectedType;
+      const matchesLocation =
+        selectedLocation === "All Locations" ||
+        normalizeCityKey(review.city || "") === normalizeCityKey(selectedLocation);
+      return matchesType && matchesLocation;
+    }),
+    [allReviews, selectedType, selectedLocation]
+  );
 
-  const renderStars = (rating) => {
-    return [...Array(5)].map((_, i) => (
+  const renderStars = useCallback((rating) =>
+    [...Array(5)].map((_, i) => (
       <Text
         key={i}
         style={[styles.star, i < rating ? styles.starFilled : styles.starEmpty]}
       >
         ★
       </Text>
-    ));
-  };
+    )),
+    []
+  );
 
   const handleDeleteReview = async (review) => {
     Alert.alert(

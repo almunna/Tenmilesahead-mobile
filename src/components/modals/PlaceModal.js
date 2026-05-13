@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -655,7 +655,7 @@ export default function PlaceModal({
     );
   };
 
-  const renderItem = ({ item }) => {
+  const renderItem = useCallback(({ item }) => {
     const documents = placeDocuments[item.id] || [];
 
     return (
@@ -808,7 +808,7 @@ export default function PlaceModal({
         </View>
       </View>
     );
-  };
+  }, [items, placePhotos, placeDocuments, editingItem, form, showAddForm, setEditingItem, setShowAddForm, setDeleteId, setForm]);
 
   return (
     <ModalShell visible={visible} title={title} onClose={onClose} fullScreen noScroll={true}>
@@ -1078,6 +1078,10 @@ export default function PlaceModal({
                   renderItem={renderItem}
                   keyExtractor={(item) => item.id}
                   contentContainerStyle={styles.list}
+                  initialNumToRender={8}
+                  maxToRenderPerBatch={8}
+                  windowSize={5}
+                  removeClippedSubviews={true}
                 />
               )}
             </>

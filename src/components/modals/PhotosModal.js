@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -236,7 +236,7 @@ export default function PhotosModal({ tripId, visible, onClose }) {
     ]);
   }
 
-  function renderItem({ item }) {
+  const renderItem = useCallback(({ item }) => {
     const isCover = trip?.coverMediaId === item.id;
 
     return (
@@ -287,7 +287,7 @@ export default function PhotosModal({ tripId, visible, onClose }) {
         />
       </View>
     );
-  }
+  }, [trip?.coverMediaId, editingCaption, setCover, deleteMedia, saveCaption, setEditingCaption]);
 
   return (
     <ModalShell
@@ -330,6 +330,10 @@ export default function PhotosModal({ tripId, visible, onClose }) {
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            windowSize={5}
+            removeClippedSubviews={true}
           />
         )}
       </View>
