@@ -17,7 +17,7 @@ const WEB_GEOCODE_API  = 'https://tenmilesahead.com/api/geocode';
 const GOOGLE_GEOCODE_API = 'https://maps.googleapis.com/maps/api/geocode/json';
 const PHOTON_API   = 'https://photon.komoot.io/api/';
 // v2: bumped to clear stale Photon/OSM coords cached under v1
-const CACHE_STORAGE_KEY = '@tma_geocode_cache_v2';
+const CACHE_STORAGE_KEY = '@tma_geocode_cache_v3';
 
 // ─── In-memory cache ─────────────────────────────────────────────────────────
 
@@ -57,13 +57,14 @@ function schedulePersist() {
 
 // Primary: call the production web API — uses the same server-side Google key
 // and normalization as the web app, guaranteeing identical coordinates.
-async function geocodeViaWebApi(city, state, country) {
-  if (!city && !country) return null;
+async function geocodeViaWebApi(address, city, state, country) {
+  if (!city && !country && !address) return null;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
     const params = new URLSearchParams();
+    if (address) params.set('address', address);
     if (city) params.set('city', city);
     if (state) params.set('state', state);
     if (country) params.set('country', country);
@@ -156,7 +157,7 @@ export async function getCoordinates(address, city, state, country) {
   }
 
   // Web API (primary, matches web exactly) → Google direct (fallback) → Photon/OSM (last resort)
-  let coords = await geocodeViaWebApi(city, state, country);
+  let coords = await geocodeViaWebApi(address, city, state, country);
   if (!coords) coords = await geocodeViaGoogle(address, city, state, country);
   if (!coords) coords = await geocodeViaPhoton(address, city, state, country);
 

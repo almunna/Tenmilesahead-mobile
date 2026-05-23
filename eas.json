@@ -9,12 +9,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyA0oaYLVKDhjlG8a4GajmGRiIosFeZOZz8"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyA0oaYLVKDhjlG8a4GajmGRiIosFeZOZz8"
       }
     },
     "production": {
@@ -25,6 +31,9 @@
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyA0oaYLVKDhjlG8a4GajmGRiIosFeZOZz8"
       }
     }
   },

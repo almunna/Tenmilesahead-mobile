@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../components/AuthProvider";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { COLORS, SPACING, SCREENS, scaleFontSize, scaleSpacing } from "../lib/constants";
 
 // ─── Packing data (ported from web packingData.ts) ───────────────────────────
@@ -80,10 +80,16 @@ function SelectCell({ checked, onChange }) {
 
 // ─── PackCell (green checkbox for packing) ───────────────────────────────────
 function PackCell({ checked, onChange, visible }) {
-  if (!visible) return <View style={styles.cell} />;
+  const [optimistic, setOptimistic] = useState(checked);
+  useEffect(() => { setOptimistic(checked); }, [checked]);
+  if (!visible) return <View style={[styles.cell, { borderWidth: 0, backgroundColor: 'transparent' }]} />;
   return (
-    <TouchableOpacity onPress={onChange} style={[styles.cell, checked && styles.cellChecked]} activeOpacity={0.7}>
-      {checked && <Text style={styles.cellCheck}>✓</Text>}
+    <TouchableOpacity
+      onPress={() => { setOptimistic((v) => !v); onChange(); }}
+      style={[styles.cell, optimistic && styles.cellChecked]}
+      activeOpacity={0.7}
+    >
+      {optimistic && <Text style={styles.cellCheck}>✓</Text>}
     </TouchableOpacity>
   );
 }
@@ -310,18 +316,20 @@ export default function PackingListScreen() {
   const trimmedTravelers = travelers.map((t) => t.trim());
 
   // ── Load saved lists ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!user) return;
-    setLoadingSaved(true);
-    getDocs(query(collection(db, "users", user.uid, "packingLists"), orderBy("updatedAt", "desc")))
-      .then((snap) => {
-        const arr = [];
-        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-        setSavedLists(arr);
-      })
-      .catch(console.error)
-      .finally(() => setLoadingSaved(false));
-  }, [user]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      setLoadingSaved(true);
+      getDocs(query(collection(db, "users", user.uid, "packingLists"), orderBy("updatedAt", "desc")))
+        .then((snap) => {
+          const arr = [];
+          snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+          setSavedLists(arr);
+        })
+        .catch(console.error)
+        .finally(() => setLoadingSaved(false));
+    }, [user])
+  );
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function resetToLanding() {
@@ -535,16 +543,18 @@ export default function PackingListScreen() {
 
   // ── Packing helpers ────────────────────────────────────────────────────────
   function togglePacked(itemId, trav) {
-    setPackedItems((prev) => {
-      const current = prev[itemId] ?? [];
-      const has = current.includes(trav);
-      const updated = has ? current.filter((t) => t !== trav) : [...current, trav];
-      const next = { ...prev, [itemId]: updated };
-      if (currentSavedId && user) {
-        updateDoc(doc(db, "users", user.uid, "packingLists", currentSavedId), { packedItems: next, updatedAt: Date.now() }).catch(console.error);
-      }
-      return next;
-    });
+    const current = packedItems[itemId] ?? [];
+    const has = current.includes(trav);
+    const updated = has ? current.filter((t) => t !== trav) : [...current, trav];
+    const next = { ...packedItems, [itemId]: updated };
+    setPackedItems(next);
+    if (currentSavedId && user) {
+      const now = Date.now();
+      updateDoc(doc(db, "users", user.uid, "packingLists", currentSavedId), { packedItems: next, updatedAt: now }).catch(console.error);
+      setSavedLists((lists) =>
+        lists.map((l) => (l.id === currentSavedId ? { ...l, packedItems: next, updatedAt: now } : l))
+      );
+    }
   }
 
   function toggleCollapse(catId) {
@@ -885,6 +895,9 @@ export default function PackingListScreen() {
         {view === "packing" && (
           <View>
             <View style={styles.packingHeader}>
+              <TouchableOpacity onPress={resetToLanding} activeOpacity={0.7} style={styles.packingBackBtn}>
+                <Text style={styles.packingBackText}>‹</Text>
+              </TouchableOpacity>
               <Text style={styles.packingTitle} numberOfLines={1}>{listName || "Packing List"}</Text>
               <View style={styles.packingHeaderActions}>
                 <TouchableOpacity onPress={confirmResetProgress} activeOpacity={0.7}>
@@ -1109,6 +1122,8 @@ const styles = StyleSheet.create({
 
   // Packing view
   packingHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: scaleSpacing(SPACING.md), gap: scaleSpacing(SPACING.sm) },
+  packingBackBtn: { paddingRight: scaleSpacing(SPACING.xs) },
+  packingBackText: { fontSize: scaleFontSize(42), color: COLORS.foreground, lineHeight: scaleFontSize(42) },
   packingTitle: { flex: 1, fontSize: scaleFontSize(22), fontWeight: "700", color: COLORS.foreground },
   packingHeaderActions: { flexDirection: "row", alignItems: "center", gap: scaleSpacing(SPACING.md), flexShrink: 0 },
   packingResetText: { fontSize: scaleFontSize(13), color: "#ef4444" },
